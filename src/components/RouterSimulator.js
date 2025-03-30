@@ -98,6 +98,9 @@ const RouterSimulator = () => {
   const handleStartSimulation = () => {
     if (routers.length < 2 || links.length === 0) return;
     
+    // Clear any existing GSAP animations first
+    gsap.globalTimeline.clear();
+    
     setSimulationStatus('running');
     
     // Convert our links to the format expected by the flooding algorithm
@@ -119,18 +122,21 @@ const RouterSimulator = () => {
       
       // Initialize empty processed LSPs set for each router
       initialProcessedLSPs[router.id] = new Set();
-      
-      // Note: We no longer pre-populate the LSDB with the router's own neighbors
-      // This will happen when Hello packets are processed
     });
     
     setLsdbData(initialLSDB);
     setProcessedLSPs(initialProcessedLSPs);
     
+    // Save current animation speed for consistent use
+    const currentSpeed = animationSpeed;
+    
     // Run the simulation
-    runSimulation(edgesForSimulation, routers[0].id, animationSpeed, 
+    runSimulation(edgesForSimulation, routers[0].id, currentSpeed, 
       (animationData) => handleAnimationStep(animationData)
     );
+    
+    // Set the GSAP timeline speed to match the selected animation speed
+    gsap.globalTimeline.timeScale(currentSpeed);
   };
   
   // Handle a step in the animation
@@ -499,8 +505,9 @@ const RouterSimulator = () => {
   // Handle simulation resume
   const handleResumeSimulation = () => {
     setSimulationStatus('running');
-    // Resume GSAP animations
+    // Resume GSAP animations with current speed
     gsap.globalTimeline.play();
+    gsap.globalTimeline.timeScale(animationSpeed);
   };
   
   // Handle simulation end
@@ -510,6 +517,26 @@ const RouterSimulator = () => {
     gsap.globalTimeline.clear();
     setPackets([]);
     setCurrentStep(0);
+  };
+  
+  // Handle simulation reset - keeps routers and links but resets simulation data
+  const handleResetSimulation = () => {
+    // Clear all animations
+    gsap.globalTimeline.clear();
+    
+    // Reset simulation data, but keep routers and links
+    setLsdbData({});
+    setRoutingTables({});
+    setProcessedLSPs({});
+    setPackets([]);
+    setCurrentStep(0);
+    setCurrentHighlight(null);
+    
+    // Reset to idle state
+    setSimulationStatus('idle');
+    
+    // Reset animation speed to default
+    setAnimationSpeed(0.5);
   };
   
   // Handle speed change
@@ -609,6 +636,7 @@ const RouterSimulator = () => {
             onPauseSimulation={handlePauseSimulation}
             onResumeSimulation={handleResumeSimulation}
             onEndSimulation={handleEndSimulation}
+            onResetSimulation={handleResetSimulation}
             onSpeedChange={handleSpeedChange}
             simulationStatus={simulationStatus}
             speed={animationSpeed}

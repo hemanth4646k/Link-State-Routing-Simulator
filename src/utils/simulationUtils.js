@@ -198,19 +198,41 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
         step: parseInt(step)
       });
       
-      // First, send all packets simultaneously
-      // In the flooding algorithm, each node sends packets in a specific order,
-      // but for the visualization we can send them simultaneously within a step
+      // Group packets by sender to prevent overlapping animations from the same router
+      const packetsBySender = {};
       packetInstructions.forEach(instruction => {
-        onStep({
-          ...instruction,
-          animationDuration: cappedAnimationDuration,
-          step: parseInt(step)
-        });
+        if (!packetsBySender[instruction.from]) {
+          packetsBySender[instruction.from] = [];
+        }
+        packetsBySender[instruction.from].push(instruction);
       });
       
-      // After packet animations complete, process any explicit updates
-      // (those not triggered by packet reception)
+      // Send packets with a slight delay between each sender's packets
+      let senderDelay = 0;
+      Object.entries(packetsBySender).forEach(([sender, instructions]) => {
+        // Chain packets from the same sender with a short delay between them
+        let packetDelay = 0;
+        instructions.forEach(instruction => {
+          setTimeout(() => {
+            onStep({
+              ...instruction,
+              animationDuration: cappedAnimationDuration,
+              step: parseInt(step)
+            });
+          }, senderDelay + packetDelay);
+          
+          // Small delay between packets from same sender to avoid overlap
+          packetDelay += 150; // 150ms between packets from same sender
+        });
+        
+        // Add a small delay between different senders
+        senderDelay += packetDelay + 50; // Additional 50ms between senders
+      });
+      
+      // Calculate total animation time for this step
+      const totalAnimationTime = senderDelay + cappedAnimationDuration;
+      
+      // After all packet animations complete, process any explicit updates
       if (updateInstructions.length > 0) {
         setTimeout(() => {
           updateInstructions.forEach(instruction => {
@@ -219,7 +241,7 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
               step: parseInt(step)
             });
           });
-        }, cappedAnimationDuration + 100);
+        }, totalAnimationTime + 100);
       }
       
       // If this is the last step, signal completion
@@ -230,12 +252,24 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
             type: 'completed',
             step: parseInt(step)
           });
-        }, cappedAnimationDuration + 500);
+        }, totalAnimationTime + 500);
       }
     }, stepDelay);
     
     // Increment delay for the next step
-    stepDelay += stepInterval;
+    // Account for the total time needed for all packets in this step
+    const senderCount = new Set(packetInstructions.map(inst => inst.from)).size;
+    const maxPacketsPerSender = Math.max(...Object.values(
+      packetInstructions.reduce((acc, inst) => {
+        acc[inst.from] = (acc[inst.from] || 0) + 1;
+        return acc;
+      }, {})
+    ) || [0]);
+    
+    const packetChainDelay = (senderCount * 50) + (maxPacketsPerSender * 150);
+    const totalStepDuration = Math.max(stepInterval, cappedAnimationDuration + packetChainDelay + 1000);
+    
+    stepDelay += totalStepDuration;
   });
 };
 

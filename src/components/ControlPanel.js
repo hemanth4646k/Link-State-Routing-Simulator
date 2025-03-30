@@ -5,6 +5,7 @@ const ControlPanel = ({
   onPauseSimulation,
   onResumeSimulation,
   onEndSimulation,
+  onResetSimulation,
   onSpeedChange,
   simulationStatus,
   speed,
@@ -30,62 +31,64 @@ const ControlPanel = ({
   
   return (
     <div className="control-panel-container">
-      <h3>Control Panel</h3>
+      <h3>Simulation Controls</h3>
       
-      {simulationStatus === 'running' && currentStep !== undefined && (
+      {simulationStatus === 'idle' && (
+        <button 
+          onClick={onStartSimulation}
+          disabled={disabled}
+        >
+          Start Simulation
+        </button>
+      )}
+      
+      {simulationStatus === 'running' && (
+        <button onClick={onPauseSimulation}>
+          Pause Simulation
+        </button>
+      )}
+      
+      {simulationStatus === 'paused' && (
+        <button onClick={onResumeSimulation}>
+          Resume Simulation
+        </button>
+      )}
+      
+      {simulationStatus !== 'idle' && (
+        <button onClick={onEndSimulation}>
+          End Simulation
+        </button>
+      )}
+      
+      {simulationStatus === 'completed' && (
+        <button onClick={onResetSimulation} className="reset-button">
+          Reset Simulation
+        </button>
+      )}
+      
+      {currentStep > 0 && (
         <div className="current-step">
-          <h4>Current Phase:</h4>
-          <div className="step-indicator">
-            {getStepDescription(currentStep)}
-          </div>
+          <h4>Simulation Progress</h4>
+          <div className="step-indicator">Step {currentStep}</div>
         </div>
       )}
       
-      <div className="control-buttons">
-        {simulationStatus === 'idle' && (
-          <button
-            onClick={onStartSimulation}
-            disabled={disabled}
-          >
-            Start Simulation
-          </button>
-        )}
-        
-        {simulationStatus === 'running' && (
-          <button onClick={onPauseSimulation}>
-            Pause Simulation
-          </button>
-        )}
-        
-        {simulationStatus === 'paused' && (
-          <button onClick={onResumeSimulation}>
-            Resume Simulation
-          </button>
-        )}
-        
-        {(simulationStatus === 'running' || simulationStatus === 'paused' || simulationStatus === 'completed') && (
-          <button onClick={onEndSimulation}>
-            End Simulation
-          </button>
-        )}
-      </div>
-      
       <div className="speed-control">
-        <label htmlFor="speed-slider">Animation Speed:</label>
-        <input
-          id="speed-slider"
-          type="range"
-          min="0.1"
-          max="3"
-          step="0.1"
-          value={speed}
-          onChange={handleSpeedChange}
-          disabled={simulationStatus === 'idle'}
-        />
+        <label htmlFor="speed-slider">Animation Speed</label>
         <div className="speed-labels">
           <span>Slow</span>
           <span>Fast</span>
         </div>
+        <input 
+          id="speed-slider"
+          type="range" 
+          min="0.1" 
+          max="2" 
+          step="0.1"
+          value={speed}
+          onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+          disabled={simulationStatus === 'running'} 
+        />
         <span>{speed.toFixed(1)}x</span>
       </div>
       
