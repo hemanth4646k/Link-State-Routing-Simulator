@@ -128,54 +128,41 @@ main {
   z-index: 6;
 }
 
-.lsp-packet, .hello-packet {
-  position: absolute;
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
-  z-index: 15;
+.packet {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 50px;
   height: 50px;
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: 25px;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  color: white;
+  z-index: 30;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  user-select: none;
   pointer-events: none;
-  animation: pulse 1.5s infinite;
-  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
-  will-change: transform, left, top;
 }
 
-.lsp-packet {
-  background-color: #ff9800;
-  background: radial-gradient(circle at 35% 35%, #ffb74d, #f57c00);
-  border: 2px solid #f57c00;
+.packet.lsp {
+  background-color: #3498db;
+  background-image: linear-gradient(135deg, #3498db, #2980b9);
 }
 
-.hello-packet {
-  background-color: #2196F3;
-  background: radial-gradient(circle at 35% 35%, #64b5f6, #1976d2);
-  border: 2px solid #1976d2;
+.packet.hello {
+  background-color: #2ecc71;
+  background-image: linear-gradient(135deg, #2ecc71, #27ae60);
 }
 
-.lsp-packet::after, .hello-packet::after {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  z-index: -1;
-  opacity: 0.4;
-  filter: blur(8px);
-  background: inherit;
-  transform: scale(1.2);
+/* Flashing animation for LSDB updates */
+@keyframes highlight {
+  0% { background-color: #fff3cd; }
+  100% { background-color: transparent; }
 }
 
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.15); opacity: 1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
-  100% { transform: scale(1); opacity: 0.9; }
+.highlight-change {
+  animation: highlight 0.8s ease-out;
 }
 
 .control-panel {
@@ -278,39 +265,6 @@ main {
   text-align: right;
 }
 
-.highlight-change {
-  animation: flash 0.8s ease-in-out;
-  position: relative;
-  z-index: 10;
-}
-
-.highlight-change td {
-  position: relative;
-  background-color: rgba(255, 235, 59, 0.3);
-}
-
-.highlight-change td::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 152, 0, 0.2);
-  animation: flash-background 0.8s ease-in-out;
-}
-
-@keyframes flash {
-  0% { transform: scale(1); }
-  20% { transform: scale(1.05); background-color: rgba(255, 235, 59, 0.7); }
-  100% { transform: scale(1); }
-}
-
-@keyframes flash-background {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
-}
-
 .lsdb-table, .routing-table {
   width: 100%;
   border-collapse: collapse;
@@ -374,4 +328,20 @@ main {
 .simulator-wrapper button:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
+}
+
+.lsdb-table .cost-badge {
+  display: inline-block;
+  background-color: #f0f4f7;
+  border-radius: 12px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  font-size: 11px;
+  color: #333;
+  border: 1px solid #ccc;
+}
+
+.highlight-change .cost-badge {
+  background-color: #fff3cd;
+  border-color: #ffeeba;
 }

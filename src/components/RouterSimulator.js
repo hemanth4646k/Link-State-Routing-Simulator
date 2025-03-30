@@ -25,6 +25,7 @@ const RouterSimulator = () => {
   const [packets, setPackets] = useState([]);
   const [currentHighlight, setCurrentHighlight] = useState(null);
   const [currentStep, setCurrentStep] = useState(0); // Track current simulation step
+  const [processedLSPs, setProcessedLSPs] = useState({}); // Track which LSPs each router has processed
   
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
@@ -106,13 +107,25 @@ const RouterSimulator = () => {
     setLsdbData({});
     setRoutingTables({});
     setPackets([]);
+    setProcessedLSPs({});
     
-    // Start with a clean LSDB for each router
+    // Start with empty LSDBs - they will be populated when Hello packets are received
     const initialLSDB = {};
+    const initialProcessedLSPs = {};
+    
     routers.forEach(router => {
+      // Initialize empty LSDB for each router
       initialLSDB[router.id] = {};
+      
+      // Initialize empty processed LSPs set for each router
+      initialProcessedLSPs[router.id] = new Set();
+      
+      // Note: We no longer pre-populate the LSDB with the router's own neighbors
+      // This will happen when Hello packets are processed
     });
+    
     setLsdbData(initialLSDB);
+    setProcessedLSPs(initialProcessedLSPs);
     
     // Run the simulation
     runSimulation(edgesForSimulation, routers[0].id, animationSpeed, 
@@ -129,6 +142,8 @@ const RouterSimulator = () => {
     
     if (data.type === 'packet') {
       // Animate packet moving from source to target
+      // In the flooding algorithm, LSDB updates happen when packets are received
+      // We'll handle the LSDB updates in the onComplete callback of the animation
       animatePacket(
         data.from, 
         data.to, 
@@ -137,13 +152,15 @@ const RouterSimulator = () => {
         data.animationDuration
       );
     } else if (data.type === 'update') {
-      // Update LSDB for a router
+      // This is for explicit LSDB updates not triggered by packets
+      // In the flooding algorithm, these only happen when a node processes
+      // an LSP it hasn't seen before, which is handled in the animation callback
+      // So these are rare and only used for special cases
       updateLSDB(data.router, data.data);
       highlightChange(data.router, data.data);
     } else if (data.type === 'completed') {
-      // Simulation completed
+      // Simulation completed - now calculate routing tables using Dijkstra's
       setSimulationStatus('completed');
-      // Calculate routing tables
       calculateRoutingTables();
     }
   };
@@ -164,11 +181,29 @@ const RouterSimulator = () => {
     // Create packet with unique ID based on source, target and timestamp
     const timestamp = Date.now();
     const packetId = `packet-${fromId}-${toId}-${timestamp}-${Math.floor(Math.random() * 1000)}`;
+    
+    // Extract data from packet according to the format in flooding.js
+    let nodeId = null;
+    let adjList = [];
+    
+    if (packetType === 'lsp' && typeof packetData === 'string') {
+      // Extract from a formatted string like "LSPA: ["B","C"]"
+      const lspMatch = packetData.match(/LSP([A-Z]): (\[[^\]]+\])/);
+      if (lspMatch) {
+        nodeId = lspMatch[1];
+        try {
+          adjList = JSON.parse(lspMatch[2]);
+        } catch (e) {
+          console.error("Error parsing LSP data:", e);
+        }
+      }
+    }
+    
     const newPacket = {
       id: packetId,
       from: fromId,
       to: toId,
-      data: packetData,
+      data: nodeId && adjList.length ? [nodeId, adjList] : packetData, // Use parsed data if available
       type: packetType,
       x: fromX,
       y: fromY
@@ -195,9 +230,89 @@ const RouterSimulator = () => {
         onComplete: () => {
           // Remove packet
           setPackets(prev => prev.filter(p => p.id !== packetId));
+          
+          // Update LSDB based on packet type
+          if (packetType === 'lsp') {
+            // For LSP packets, update the LSDB with the link state information
+            let updateData;
+            
+            if (Array.isArray(newPacket.data)) {
+              // If we already parsed the data correctly in the packet creation
+              updateData = newPacket.data;
+            } else if (Array.isArray(packetData)) {
+              // If the data was provided as an array directly from simulationUtils
+              updateData = packetData;
+            }
+            
+            if (updateData && updateData.length === 2) {
+              updateLSDB(toId, updateData);
+              highlightChange(toId, updateData);
+            }
+          } else if (packetType === 'hello') {
+            // For Hello packets, update the LSDB to note the neighbor connection
+            // When a router receives a Hello, it should record that router as a neighbor
+            updateHelloPacket(fromId, toId);
+          }
         }
       });
     }, 50);
+  };
+  
+  // Process a Hello packet from one router to another
+  const updateHelloPacket = (fromId, toId) => {
+    // When a router receives a Hello packet, it adds the sender as a neighbor
+    setLsdbData(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      
+      // Ensure target router has an entry in LSDB
+      if (!updated[toId]) {
+        updated[toId] = {};
+      }
+      
+      // If this router doesn't have an entry for itself, create one
+      if (!updated[toId][toId]) {
+        updated[toId][toId] = [];
+      }
+      
+      // Add the sender to the target's list of neighbors
+      // Use a Set temporarily to avoid duplicates, then convert back to array
+      const neighbors = new Set(updated[toId][toId]);
+      neighbors.add(fromId);
+      updated[toId][toId] = Array.from(neighbors).sort();
+      
+      // Similarly, the source also learns that the target is a neighbor
+      if (!updated[fromId]) {
+        updated[fromId] = {};
+      }
+      
+      if (!updated[fromId][fromId]) {
+        updated[fromId][fromId] = [];
+      }
+      
+      const sourceNeighbors = new Set(updated[fromId][fromId]);
+      sourceNeighbors.add(toId);
+      updated[fromId][fromId] = Array.from(sourceNeighbors).sort();
+      
+      // Add to processed LSPs 
+      setProcessedLSPs(lspPrev => {
+        const lspUpdated = { ...lspPrev };
+        
+        if (!lspUpdated[toId]) {
+          lspUpdated[toId] = new Set();
+        }
+        
+        if (!lspUpdated[fromId]) {
+          lspUpdated[fromId] = new Set();
+        }
+        
+        return lspUpdated;
+      });
+      
+      return updated;
+    });
+    
+    // Highlight the change
+    highlightChange(toId, [toId, [fromId]]);
   };
   
   // Update a router's LSDB with new data
@@ -214,19 +329,44 @@ const RouterSimulator = () => {
       return;
     }
     
-    setLsdbData(prev => {
-      // Make a deep copy of the previous state
-      const updated = JSON.parse(JSON.stringify(prev));
+    // Create a unique key for this LSP
+    const lspKey = `LSP${nodeId}: ${JSON.stringify(adjList)}`;
+    
+    // Check if this router has already processed this LSP
+    setProcessedLSPs(prev => {
+      const updated = { ...prev };
       
-      // Ensure the router entry exists
+      // Initialize the set if it doesn't exist
       if (!updated[routerId]) {
-        updated[routerId] = {};
+        updated[routerId] = new Set();
       }
       
-      // Update with the new adjacency list
-      updated[routerId][nodeId] = adjList;
+      // If router has already processed this LSP, skip the update
+      if (updated[routerId].has(lspKey)) {
+        console.log(`Router ${routerId} has already processed ${lspKey}, skipping update`);
+        return updated;
+      }
       
-      console.log(`Updated LSDB for Router ${routerId}, added/updated node ${nodeId} with adj list:`, adjList);
+      // Otherwise mark it as processed
+      updated[routerId].add(lspKey);
+      
+      // And update the LSDB
+      setLsdbData(lsdbPrev => {
+        // Make a deep copy of the previous state
+        const lsdbUpdated = JSON.parse(JSON.stringify(lsdbPrev));
+        
+        // Ensure the router entry exists
+        if (!lsdbUpdated[routerId]) {
+          lsdbUpdated[routerId] = {};
+        }
+        
+        // Update with the new adjacency list
+        lsdbUpdated[routerId][nodeId] = adjList;
+        
+        console.log(`Updated LSDB for Router ${routerId}, added/updated node ${nodeId} with adj list:`, adjList);
+        
+        return lsdbUpdated;
+      });
       
       return updated;
     });
@@ -414,6 +554,7 @@ const RouterSimulator = () => {
             routingTables={routingTables}
             currentHighlight={currentHighlight}
             simulationStatus={simulationStatus}
+            links={links}
           />
         </div>
         

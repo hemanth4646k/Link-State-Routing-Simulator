@@ -1,10 +1,10 @@
 // Import flooding.js to access its functionality directly
 import { sendHelloPackets, floodLSP } from '../algo/flooding';
 
-// Regex pattern to extract packet information
-const PACKET_REGEX = /Sending ([^:]+): (\[[^\]]+\]) from ([A-Z]) to ([A-Z])/;
+// Regex patterns to extract packet information from flooding.js output
+const PACKET_REGEX = /Sending (LSP[A-Z]): (\[[^\]]+\]) from ([A-Z]) to ([A-Z])/;
 const HELLO_REGEX = /Sending Hello packet from ([A-Z]) to ([A-Z])/;
-const UPDATE_REGEX = /Node ([A-Z]) updates table with ([^;]+); Sending/;
+const UPDATE_REGEX = /Node ([A-Z]) updates table with (LSP[A-Z]: \[[^\]]+\]); Sending/;
 
 /**
  * Extract animation instructions from flooding algorithm
@@ -36,7 +36,7 @@ const extractAnimationInstructions = (edges, startNode) => {
       if (line.includes("--- Sending Hello Packets ---")) {
         currentStep = 0;
       } else if (line.includes("--- Flooding Link State Packets (LSPs) ---")) {
-        currentStep = 1;
+        currentStep = 0; // Reset for upcoming steps
       } else if (line.match(/Step \d+:/)) {
         const stepMatch = line.match(/Step (\d+):/);
         if (stepMatch) {
@@ -51,15 +51,17 @@ const extractAnimationInstructions = (edges, startNode) => {
             step: 0,
             type: 'packet',
             packetType: 'hello',
+            packet: `Hello packet from ${fromNode} to ${toNode}`,
             from: fromNode,
             to: toNode,
             data: null
           });
         }
         
-        // Match LSP packets
+        // Match LSP packets from the log output
+        // Format: "Sending LSPX: ["Y","Z"] from A to B"
         const lspMatch = line.match(PACKET_REGEX);
-        if (lspMatch && currentStep >= 1) {
+        if (lspMatch && !line.includes("updates table")) {
           const [_, packetType, packetData, fromNode, toNode] = lspMatch;
           
           // Extract nodeid from packet (e.g., "LSPA: ["B","C"]" -> "A")
@@ -83,20 +85,10 @@ const extractAnimationInstructions = (edges, startNode) => {
             to: toNode,
             data: [nodeId, adjList]
           });
-          
-          // For Step 1 packets, also create update instructions
-          // because these LSPs update the router's LSDB without explicit "updates table" messages
-          if (currentStep === 1) {
-            instructions.push({
-              step: currentStep,
-              type: 'update',
-              router: toNode,
-              data: [nodeId, adjList]
-            });
-          }
         }
         
-        // Match table updates
+        // Match lines where a node updates its table and forwards a packet
+        // Format: "Node A updates table with LSPB: ["C","D"]; Sending LSPB: ["C","D"] from A to C"
         const updateMatch = line.match(UPDATE_REGEX);
         if (updateMatch && currentStep >= 2) {
           const [_, routerId, packetInfo] = updateMatch;
@@ -117,12 +109,30 @@ const extractAnimationInstructions = (edges, startNode) => {
             }
           }
           
+          // In Step 2+ of the flooding algorithm, a node updates its table with a new LSP
+          // and then forwards it to its neighbors
           instructions.push({
             step: currentStep,
             type: 'update',
             router: routerId,
             data: [nodeId, adjList]
           });
+          
+          // Extract the forwarding part: "Sending LSPB: ["C","D"] from A to C"
+          const forwardMatch = line.match(/Sending ([^;]+) from ([A-Z]) to ([A-Z])/);
+          if (forwardMatch) {
+            const [__, packetInfo, fromNode, toNode] = forwardMatch;
+            
+            instructions.push({
+              step: currentStep,
+              type: 'packet',
+              packetType: 'lsp',
+              packet: packetInfo,
+              from: fromNode,
+              to: toNode,
+              data: [nodeId, adjList]
+            });
+          }
         }
       }
     });
@@ -171,7 +181,12 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
       if (inst.type === 'packet') {
         packetInstructions.push(inst);
       } else if (inst.type === 'update') {
-        updateInstructions.push(inst);
+        // In the flooding algorithm, LSDBs are only updated when packets are received and processed,
+        // never with standalone update events. However, we need to keep "explicit" updates
+        // that aren't triggered by packets (e.g., when a node discovers its neighbors)
+        if (inst.step !== 1) { // Skip step 1 updates as they're handled by packets
+          updateInstructions.push(inst);
+        }
       }
     });
     
@@ -184,6 +199,8 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
       });
       
       // First, send all packets simultaneously
+      // In the flooding algorithm, each node sends packets in a specific order,
+      // but for the visualization we can send them simultaneously within a step
       packetInstructions.forEach(instruction => {
         onStep({
           ...instruction,
@@ -192,7 +209,8 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
         });
       });
       
-      // After packet animations complete, process all updates
+      // After packet animations complete, process any explicit updates
+      // (those not triggered by packet reception)
       if (updateInstructions.length > 0) {
         setTimeout(() => {
           updateInstructions.forEach(instruction => {

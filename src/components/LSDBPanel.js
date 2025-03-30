@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus }) => {
+const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus, links }) => {
   const [selectedRouter, setSelectedRouter] = useState('');
   const [viewMode, setViewMode] = useState('lsdb'); // 'lsdb' or 'routingTable'
   const [flashingRow, setFlashingRow] = useState(null);
@@ -20,11 +20,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   // When current highlight changes, update the flashing row
   useEffect(() => {
     if (currentHighlight && currentHighlight.data && currentHighlight.data[0]) {
-      // Auto-select the router that's receiving the update if none is selected
-      if (selectedRouter === '' || selectedRouter !== currentHighlight.routerId) {
-        setSelectedRouter(currentHighlight.routerId);
-      }
-      
+      // Only set flashing row, don't auto-select router
       setFlashingRow({
         routerId: currentHighlight.routerId,
         nodeId: currentHighlight.data[0],
@@ -38,7 +34,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       
       return () => clearTimeout(timer);
     }
-  }, [currentHighlight, selectedRouter]);
+  }, [currentHighlight]);
   
   // Effect to auto-select a router when data becomes available
   useEffect(() => {
@@ -84,6 +80,21 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       return <p>No LSDB entries for Router {selectedRouter}.</p>;
     }
     
+    // Sort entries alphabetically by router ID
+    const sortedEntries = [...entries].sort((a, b) => a[0].localeCompare(b[0]));
+    
+    // Helper function to get edge cost
+    const getEdgeCost = (source, target) => {
+      if (!links) return null;
+      
+      const link = links.find(l => 
+        (l.source === source && l.target === target) || 
+        (l.source === target && l.target === source)
+      );
+      
+      return link ? link.cost : null;
+    };
+    
     return (
       <>
         <h4>Link State Database for Router {selectedRouter}</h4>
@@ -91,17 +102,34 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
           <thead>
             <tr>
               <th>Router ID</th>
-              <th>Adjacent Nodes</th>
+              <th>Adjacent Nodes (with costs)</th>
             </tr>
           </thead>
           <tbody>
-            {entries.map(([nodeId, adjacencies]) => (
+            {sortedEntries.map(([nodeId, adjacencies]) => (
               <tr 
                 key={nodeId}
                 className={shouldHighlight(selectedRouter, nodeId) ? 'highlight-change' : ''}
               >
                 <td>{nodeId}</td>
-                <td>{Array.isArray(adjacencies) ? adjacencies.join(', ') : JSON.stringify(adjacencies)}</td>
+                <td>
+                  {Array.isArray(adjacencies) ? 
+                    adjacencies.map(adj => {
+                      const cost = getEdgeCost(nodeId, adj);
+                      return (
+                        <span key={adj}>
+                          {adj}
+                          {cost !== null && (
+                            <span className="cost-badge">cost: {cost}</span>
+                          )}
+                          {' '}
+                        </span>
+                      );
+                    })
+                    : 
+                    JSON.stringify(adjacencies)
+                  }
+                </td>
               </tr>
             ))}
           </tbody>
@@ -122,6 +150,9 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       return <p>No routing table entries for Router {selectedRouter}.</p>;
     }
     
+    // Sort entries by destination
+    const sortedEntries = [...entries].sort((a, b) => a.destination.localeCompare(b.destination));
+    
     return (
       <>
         <h4>Routing Table for Router {selectedRouter}</h4>
@@ -134,7 +165,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
             </tr>
           </thead>
           <tbody>
-            {entries.map(entry => (
+            {sortedEntries.map(entry => (
               <tr key={entry.destination}>
                 <td>{entry.destination}</td>
                 <td>{entry.nextHop}</td>
