@@ -155,7 +155,8 @@ const RouterSimulator = () => {
         data.to, 
         data.packet, 
         data.packetType, 
-        data.animationDuration
+        data.animationDuration,
+        data.onComplete // Pass the onComplete callback to track step completion
       );
     } else if (data.type === 'update') {
       // This is for explicit LSDB updates not triggered by packets
@@ -172,17 +173,25 @@ const RouterSimulator = () => {
   };
   
   // Animate a packet moving from source to target
-  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000) => {
+  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null) => {
     const fromRouter = routers.find(r => r.id === fromId);
     const toRouter = routers.find(r => r.id === toId);
     
-    if (!fromRouter || !toRouter) return;
+    if (!fromRouter || !toRouter) {
+      // If routers not found, still call the callback to maintain step progression
+      if (externalCallback) externalCallback();
+      return;
+    }
     
     // Calculate center points of routers
     const fromX = fromRouter.x + 40; // Router center (80px width)
     const fromY = fromRouter.y + 40; // Router center (80px height)
     const toX = toRouter.x + 40;
     const toY = toRouter.y + 40;
+    
+    // Use fixed packet size for consistency
+    const packetSize = 45;
+    const halfPacketSize = packetSize / 2;
     
     // Create packet with unique ID based on source, target and timestamp
     const timestamp = Date.now();
@@ -212,7 +221,8 @@ const RouterSimulator = () => {
       data: nodeId && adjList.length ? [nodeId, adjList] : packetData, // Use parsed data if available
       type: packetType,
       x: fromX,
-      y: fromY
+      y: fromY,
+      size: packetSize
     };
     
     // Add to state
@@ -222,17 +232,22 @@ const RouterSimulator = () => {
     setTimeout(() => {
       // Find packet element
       const packetEl = document.getElementById(packetId);
-      if (!packetEl) return;
+      if (!packetEl) {
+        // If packet element not found, still call the callback to maintain step progression
+        if (externalCallback) externalCallback();
+        return;
+      }
       
-      // Calculate duration in seconds, ensuring it's not too long or too short
-      const durationInSeconds = Math.min(Math.max(animationDuration / 1000, 0.5), 10);
+      // Use fixed duration from animationDuration parameter
+      // This ensures all packets travel at the same speed regardless of distance
+      const durationInSeconds = animationDuration / 1000;
       
       // Animate directly to target with smoother easing
       gsap.to(packetEl, {
-        left: `${toX - 25}px`, // Adjust for packet size (50px wide)
-        top: `${toY - 25}px`,  // Adjust for packet size (50px tall)
+        left: `${toX - halfPacketSize}px`, // Adjust for packet size
+        top: `${toY - halfPacketSize}px`,  // Adjust for packet size
         duration: durationInSeconds,
-        ease: "power2.inOut",
+        ease: "power1.inOut", // Linear with slight ease at ends
         onComplete: () => {
           // Remove packet
           setPackets(prev => prev.filter(p => p.id !== packetId));
@@ -259,6 +274,9 @@ const RouterSimulator = () => {
             // When a router receives a Hello, it should record that router as a neighbor
             updateHelloPacket(fromId, toId);
           }
+          
+          // Call external callback if provided to signal completion for step sequencing
+          if (externalCallback) externalCallback();
         }
       });
     }, 50);
@@ -521,7 +539,7 @@ const RouterSimulator = () => {
   
   // Handle simulation reset - keeps routers and links but resets simulation data
   const handleResetSimulation = () => {
-    // Clear all animations
+    // Clear all animations first
     gsap.globalTimeline.clear();
     
     // Reset simulation data, but keep routers and links
@@ -626,6 +644,7 @@ const RouterSimulator = () => {
               y={packet.y}
               data={packet.data}
               type={packet.type}
+              size={packet.size}
             />
           ))}
         </div>

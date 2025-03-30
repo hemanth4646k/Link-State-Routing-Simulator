@@ -156,7 +156,6 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
   const instructions = extractAnimationInstructions(edges, startNode);
   
   // Set up variables for animation timing
-  let stepDelay = 0;
   const stepInterval = 5000 / speed; // Time between major steps
   const packetAnimationDuration = 2000 / speed; // Duration for packet animations, longer for better visibility at slow speeds
   
@@ -170,8 +169,18 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
     return acc;
   }, {});
   
-  // Process each step with appropriate delays
-  Object.entries(stepGroups).forEach(([step, stepInstructions], stepIndex) => {
+  // Fixed timing parameters (in milliseconds)
+  const fixedPacketTravelTime = 1500 / speed; // Consistent travel time for all packets
+  const fixedPacketInterval = 300 / speed; // Fixed interval between packets from same sender
+  
+  // Process steps sequentially using a recursive function to ensure steps don't overlap
+  const processStep = (stepIndex) => {
+    const stepNumbers = Object.keys(stepGroups).sort((a, b) => parseInt(a) - parseInt(b));
+    if (stepIndex >= stepNumbers.length) return; // All steps completed
+    
+    const currentStepNumber = stepNumbers[stepIndex];
+    const stepInstructions = stepGroups[currentStepNumber];
+    
     // Within each step, organize packets and updates
     const packetInstructions = [];
     const updateInstructions = [];
@@ -190,87 +199,113 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
       }
     });
     
-    // Set timeout for the entire step
-    setTimeout(() => {
-      // Show step label first
-      onStep({
-        type: 'step',
-        step: parseInt(step)
-      });
+    // Show step label first
+    onStep({
+      type: 'step',
+      step: parseInt(currentStepNumber)
+    });
+    
+    // Group packets by sender to avoid overlapping
+    const packetsBySender = {};
+    packetInstructions.forEach(instruction => {
+      if (!packetsBySender[instruction.from]) {
+        packetsBySender[instruction.from] = [];
+      }
+      packetsBySender[instruction.from].push(instruction);
+    });
+    
+    // Count animation completions to track when all animations for this step are done
+    let totalAnimations = 0;
+    let completedAnimations = 0;
+    
+    // Calculate how many animations we're going to have in total
+    Object.values(packetsBySender).forEach(instructions => {
+      totalAnimations += instructions.length;
+    });
+    
+    // Define a function to be called when each animation completes
+    const onAnimationComplete = () => {
+      completedAnimations++;
       
-      // Group packets by sender to prevent overlapping animations from the same router
-      const packetsBySender = {};
-      packetInstructions.forEach(instruction => {
-        if (!packetsBySender[instruction.from]) {
-          packetsBySender[instruction.from] = [];
-        }
-        packetsBySender[instruction.from].push(instruction);
-      });
-      
-      // Send packets with a slight delay between each sender's packets
-      let senderDelay = 0;
-      Object.entries(packetsBySender).forEach(([sender, instructions]) => {
-        // Chain packets from the same sender with a short delay between them
-        let packetDelay = 0;
-        instructions.forEach(instruction => {
-          setTimeout(() => {
-            onStep({
-              ...instruction,
-              animationDuration: cappedAnimationDuration,
-              step: parseInt(step)
-            });
-          }, senderDelay + packetDelay);
-          
-          // Small delay between packets from same sender to avoid overlap
-          packetDelay += 150; // 150ms between packets from same sender
-        });
-        
-        // Add a small delay between different senders
-        senderDelay += packetDelay + 50; // Additional 50ms between senders
-      });
-      
-      // Calculate total animation time for this step
-      const totalAnimationTime = senderDelay + cappedAnimationDuration;
-      
-      // After all packet animations complete, process any explicit updates
-      if (updateInstructions.length > 0) {
-        setTimeout(() => {
+      // If all packet animations are complete, process any updates and then move to the next step
+      if (completedAnimations === totalAnimations) {
+        if (updateInstructions.length > 0) {
+          // Process all update instructions
           updateInstructions.forEach(instruction => {
             onStep({
               ...instruction,
-              step: parseInt(step)
+              step: parseInt(currentStepNumber)
             });
           });
-        }, totalAnimationTime + 100);
+        }
+        
+        // Check if this is the last step
+        if (stepIndex === stepNumbers.length - 1) {
+          // Signal completion
+          setTimeout(() => {
+            onStep({ 
+              type: 'completed',
+              step: parseInt(currentStepNumber)
+            });
+          }, 500);
+        } else {
+          // Move to the next step with a delay
+          setTimeout(() => {
+            processStep(stepIndex + 1);
+          }, stepInterval);
+        }
+      }
+    };
+    
+    // If there are no packet animations, move directly to updates
+    if (totalAnimations === 0) {
+      if (updateInstructions.length > 0) {
+        updateInstructions.forEach(instruction => {
+          onStep({
+            ...instruction,
+            step: parseInt(currentStepNumber)
+          });
+        });
       }
       
-      // If this is the last step, signal completion
-      const isLastStep = parseInt(step) === Math.max(...Object.keys(stepGroups).map(s => parseInt(s)));
-      if (isLastStep) {
+      // Check if this is the last step
+      if (stepIndex === stepNumbers.length - 1) {
+        // Signal completion
         setTimeout(() => {
           onStep({ 
             type: 'completed',
-            step: parseInt(step)
+            step: parseInt(currentStepNumber)
           });
-        }, totalAnimationTime + 500);
+        }, 500);
+      } else {
+        // Move to the next step with a delay
+        setTimeout(() => {
+          processStep(stepIndex + 1);
+        }, stepInterval);
       }
-    }, stepDelay);
+      return;
+    }
     
-    // Increment delay for the next step
-    // Account for the total time needed for all packets in this step
-    const senderCount = new Set(packetInstructions.map(inst => inst.from)).size;
-    const maxPacketsPerSender = Math.max(...Object.values(
-      packetInstructions.reduce((acc, inst) => {
-        acc[inst.from] = (acc[inst.from] || 0) + 1;
-        return acc;
-      }, {})
-    ) || [0]);
-    
-    const packetChainDelay = (senderCount * 50) + (maxPacketsPerSender * 150);
-    const totalStepDuration = Math.max(stepInterval, cappedAnimationDuration + packetChainDelay + 1000);
-    
-    stepDelay += totalStepDuration;
-  });
+    // Schedule packets with synchronized timing
+    Object.entries(packetsBySender).forEach(([sender, instructions]) => {
+      // For each sender, schedule its packets with a fixed interval
+      instructions.forEach((instruction, index) => {
+        const packetStartTime = index * fixedPacketInterval;
+        
+        setTimeout(() => {
+          onStep({
+            ...instruction,
+            animationDuration: fixedPacketTravelTime,
+            step: parseInt(currentStepNumber),
+            onComplete: onAnimationComplete // Pass the callback function for tracking completion
+          });
+        }, packetStartTime);
+      });
+    });
+  };
+  
+  // Start processing steps from the first step
+  processStep(0);
 };
 
 // Mock implementation if the real flooding.js functions are not available

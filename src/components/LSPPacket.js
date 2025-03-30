@@ -1,6 +1,6 @@
 import React from 'react';
 
-const LSPPacket = ({ id, x, y, data, type }) => {
+const LSPPacket = ({ id, x, y, data, type, size = 50 }) => {
   // Display for the packet based on type and data
   const getDisplayText = () => {
     if (type === 'hello') {
@@ -21,14 +21,24 @@ const LSPPacket = ({ id, x, y, data, type }) => {
     return 'LSP';
   };
   
+  // Calculate half size for positioning
+  const halfSize = size / 2;
+  
+  // Adjust font size based on packet size
+  const fontSize = Math.max(10, Math.min(12, size * 0.25));
+  
   return (
     <div
       id={id}
       className={`packet ${type}`}
       style={{
         position: 'absolute',
-        left: `${x - 25}px`, // Center the 50px wide packet
-        top: `${y - 25}px`,  // Center the 50px tall packet
+        left: `${x - halfSize}px`, // Center the packet
+        top: `${y - halfSize}px`,  // Center the packet
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: `${halfSize}px`,
+        fontSize: `${fontSize}px`
       }}
     >
       {getDisplayText()}
