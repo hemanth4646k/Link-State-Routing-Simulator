@@ -83,20 +83,87 @@ main {
 }
 
 .router-node {
-  position: absolute;
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background-color: #4CAF50;
+  background-color: #3498db;
   color: white;
+  font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: bold;
-  cursor: grab;
+  position: absolute;
   user-select: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
   z-index: 10;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  touch-action: none; /* Prevent browser handling of drag gestures */
+}
+
+/* Only apply grab styles when not in connect mode */
+.router-node:not(.disabled):active {
+  transform: scale(1.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  transition: none; /* Remove transition for immediate feedback */
+}
+
+.router-node:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.router-node.selected {
+  background-color: #e74c3c;
+  box-shadow: 0 0 0 4px rgba(231, 76, 60, 0.3);
+}
+
+.router-node.disabled {
+  opacity: 0.7;
+  cursor: not-allowed !important; /* Force not-allowed cursor for disabled state */
+  pointer-events: none;
+}
+
+.router-link-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.router-link-line {
+  stroke-linecap: round;
+}
+
+.link-cost {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-weight: bold;
+}
+
+.link-cost.selected {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.delete-button {
+  background-color: #e74c3c !important;
+  color: white !important;
+}
+
+.delete-button:hover {
+  background-color: #c0392b !important;
+}
+
+.delete-button:disabled {
+  background-color: #e57373 !important;
+  opacity: 0.6;
+}
+
+.toolbox button.active {
+  background-color: #27ae60;
+  color: white;
 }
 
 .router-link {
@@ -388,4 +455,17 @@ main {
 .reset-button {
   background-color: #ff9800 !important;
   color: white;
+}
+
+.help-text {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 5px;
+  border-left: 4px solid #3498db;
+  font-size: 14px;
+}
+
+.help-text p {
+  margin: 5px 0;
 }

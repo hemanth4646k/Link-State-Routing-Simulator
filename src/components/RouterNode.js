@@ -1,57 +1,86 @@
-import React, { useRef, useEffect } from 'react';
-import { gsap } from 'gsap';
-import { Draggable } from 'gsap/Draggable';
+import React, { useState, useRef } from 'react';
 
-// Register the Draggable plugin
-gsap.registerPlugin(Draggable);
-
-const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled }) => {
+const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMode }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
   const nodeRef = useRef(null);
-  const dragInstance = useRef(null);
   
-  useEffect(() => {
-    if (nodeRef.current && !disabled) {
-      // Initialize Draggable
-      dragInstance.current = Draggable.create(nodeRef.current, {
-        type: 'x,y',
-        bounds: '.simulator-stage',
-        onDragEnd: function() {
-          onDrag(id, this.x + x, this.y + y);
-        }
-      })[0];
-      
-      // Reset position to match props
-      gsap.set(nodeRef.current, { x: 0, y: 0 });
-    }
+  const handleMouseDown = (e) => {
+    e.preventDefault(); // Prevent text selection during drag
+    if (disabled || connectMode) return; // Don't allow dragging in connect mode
     
-    return () => {
-      // Cleanup draggable instance
-      if (dragInstance.current) {
-        dragInstance.current.kill();
-      }
+    // Record initial position for dragging
+    startPosRef.current = { 
+      x: e.clientX - x, 
+      y: e.clientY - y 
     };
-  }, [id, x, y, onDrag, disabled]);
+    
+    setIsDragging(true);
+    setHasMovedDuringDrag(false);
+    
+    // Add event listeners for mouse movement and up
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
   
-  const handleClick = () => {
-    if (!disabled) {
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    
+    // Calculate new position
+    const newX = Math.max(0, e.clientX - startPosRef.current.x);
+    const newY = Math.max(0, e.clientY - startPosRef.current.y);
+    
+    // Only update if position has changed
+    if (newX !== x || newY !== y) {
+      setHasMovedDuringDrag(true);
+      // Update position
+      onDrag(id, newX, newY);
+    }
+  };
+  
+  const handleMouseUp = (e) => {
+    if (isDragging) {
+      // Only trigger click if we didn't drag significantly
+      if (!hasMovedDuringDrag && onClick) {
+        onClick(id);
+      }
+      
+      setIsDragging(false);
+      
+      // Remove event listeners
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    }
+  };
+  
+  // Handle click for non-dragging mode (like connect mode)
+  const handleClick = (e) => {
+    if (connectMode && onClick) {
       onClick(id);
     }
   };
   
+  // Determine the appropriate cursor based on the current mode
+  const getCursor = () => {
+    if (disabled) return 'not-allowed';
+    if (connectMode) return 'pointer'; // Use pointer cursor for connecting
+    return isDragging ? 'grabbing' : 'grab'; // Use grab cursors for dragging
+  };
+  
   return (
-    <div
-      id={`router-${id}`}
+    <div 
       ref={nodeRef}
       className={`router-node ${isSelected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
-      style={{
-        left: `${x}px`,
+      style={{ 
+        left: `${x}px`, 
         top: `${y}px`,
-        borderColor: isSelected ? 'yellow' : 'transparent',
-        opacity: disabled ? 0.7 : 1
+        cursor: getCursor()
       }}
-      onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onClick={connectMode ? handleClick : undefined}
     >
-      {id}
+      Router {id}
     </div>
   );
 };

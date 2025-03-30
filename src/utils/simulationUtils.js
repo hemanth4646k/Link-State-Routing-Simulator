@@ -241,13 +241,13 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
         
         // Check if this is the last step
         if (stepIndex === stepNumbers.length - 1) {
-          // Signal completion
+          // Signal completion with a slightly longer delay to ensure all state updates are processed
           setTimeout(() => {
             onStep({ 
               type: 'completed',
               step: parseInt(currentStepNumber)
             });
-          }, 500);
+          }, 1000); // Increased from 500ms to 1000ms
         } else {
           // Move to the next step with a delay
           setTimeout(() => {
@@ -270,13 +270,13 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
       
       // Check if this is the last step
       if (stepIndex === stepNumbers.length - 1) {
-        // Signal completion
+        // Signal completion with a slightly longer delay to ensure all state updates are processed
         setTimeout(() => {
           onStep({ 
             type: 'completed',
             step: parseInt(currentStepNumber)
           });
-        }, 500);
+        }, 1000); // Increased from 500ms to 1000ms
       } else {
         // Move to the next step with a delay
         setTimeout(() => {

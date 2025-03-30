@@ -17,6 +17,8 @@ const RouterSimulator = () => {
   const [links, setLinks] = useState([]);
   const [selectedRouters, setSelectedRouters] = useState([]);
   const [connectMode, setConnectMode] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedElements, setSelectedElements] = useState({routers: [], links: []});
   const [showLinkCostModal, setShowLinkCostModal] = useState(false);
   const [lsdbData, setLsdbData] = useState({});
   const [routingTables, setRoutingTables] = useState({});
@@ -55,24 +57,121 @@ const RouterSimulator = () => {
   const handleRouterDrag = (id, x, y) => {
     if (simulationStatus === 'running') return;
     
-    const updatedRouters = routers.map(router => 
-      router.id === id ? { ...router, x, y } : router
+    // Ensure we have a valid stage reference
+    if (!stageRef.current) return;
+    
+    // Get stage dimensions to keep routers within bounds
+    const stageRect = stageRef.current.getBoundingClientRect();
+    const stageWidth = stageRect.width;
+    const stageHeight = stageRect.height;
+    
+    // Ensure router stays within stage boundaries
+    // Allow 80% of router to be outside bounds for better usability
+    const routerSize = 80;
+    const minX = -routerSize * 0.8;
+    const minY = -routerSize * 0.8;
+    const maxX = stageWidth - routerSize * 0.2;
+    const maxY = stageHeight - routerSize * 0.2;
+    
+    // Constrain coordinates to stage boundaries
+    const boundedX = Math.max(minX, Math.min(maxX, x));
+    const boundedY = Math.max(minY, Math.min(maxY, y));
+    
+    // Update router position
+    setRouters(prev => 
+      prev.map(router => 
+        router.id === id 
+          ? { ...router, x: boundedX, y: boundedY } 
+          : router
+      )
     );
-    setRouters(updatedRouters);
+    
+    // If there are links connected to this router, they will automatically update
+    // since they reference the router positions directly
   };
   
-  // Handle router click - used for creating links
+  // Handle router click - used for creating links or selecting elements
   const handleRouterClick = (id) => {
-    if (!connectMode || simulationStatus === 'running') return;
+    // If in simulation, don't allow selection
+    if (simulationStatus === 'running') return;
     
-    if (selectedRouters.length === 0) {
-      // First router selected
-      setSelectedRouters([id]);
-    } else if (selectedRouters[0] !== id) {
-      // Second router selected, show link cost modal
-      setSelectedRouters([...selectedRouters, id]);
-      setShowLinkCostModal(true);
+    if (connectMode) {
+      if (selectedRouters.length === 0) {
+        // First router selected for connection
+        setSelectedRouters([id]);
+      } else if (selectedRouters[0] !== id) {
+        // Second router selected, show link cost modal
+        setSelectedRouters([...selectedRouters, id]);
+        setShowLinkCostModal(true);
+      }
+    } else if (selectionMode) {
+      // Toggle selection of this router
+      setSelectedElements(prev => {
+        const isSelected = prev.routers.includes(id);
+        return {
+          ...prev,
+          routers: isSelected 
+            ? prev.routers.filter(routerId => routerId !== id) 
+            : [...prev.routers, id]
+        };
+      });
     }
+  };
+  
+  // Handle link click for selection
+  const handleLinkClick = (linkId) => {
+    if (simulationStatus === 'running' || connectMode) return;
+    
+    if (selectionMode) {
+      setSelectedElements(prev => {
+        const isSelected = prev.links.includes(linkId);
+        return {
+          ...prev,
+          links: isSelected 
+            ? prev.links.filter(id => id !== linkId) 
+            : [...prev.links, linkId]
+        };
+      });
+    }
+  };
+  
+  // Toggle selection mode
+  const toggleSelectionMode = () => {
+    // Clear existing selections when toggling
+    setSelectedElements({routers: [], links: []});
+    setSelectionMode(!selectionMode);
+    setConnectMode(false);
+    setSelectedRouters([]);
+  };
+  
+  // Delete selected elements
+  const deleteSelectedElements = () => {
+    if (simulationStatus === 'running') return;
+    
+    const { routers: selectedRouterIds, links: selectedLinkIds } = selectedElements;
+    
+    // Delete selected links
+    if (selectedLinkIds.length > 0) {
+      setLinks(prev => prev.filter(link => !selectedLinkIds.includes(link.id)));
+    }
+    
+    // Delete selected routers and all their connected links
+    if (selectedRouterIds.length > 0) {
+      // First, find all links connected to the selected routers
+      const linkedLinkIds = links.filter(link => 
+        selectedRouterIds.includes(link.source) || selectedRouterIds.includes(link.target)
+      ).map(link => link.id);
+      
+      // Remove the routers
+      setRouters(prev => prev.filter(router => !selectedRouterIds.includes(router.id)));
+      
+      // Remove all links connected to deleted routers
+      setLinks(prev => prev.filter(link => !linkedLinkIds.includes(link.id)));
+    }
+    
+    // Clear selection
+    setSelectedElements({routers: [], links: []});
+    setSelectionMode(false);
   };
   
   // Add a link between routers with a cost
@@ -101,15 +200,20 @@ const RouterSimulator = () => {
     // Clear any existing GSAP animations first
     gsap.globalTimeline.clear();
     
+    // Reset any in-progress simulation state
+    setCurrentStep(0);
+    setCurrentHighlight(null);
+    setPackets([]);
+    
     setSimulationStatus('running');
     
     // Convert our links to the format expected by the flooding algorithm
     const edgesForSimulation = links.map(link => [link.source, link.target, link.cost]);
     
-    // Reset any previous simulation data
+    // Reset simulation data
+    // Note: We're keeping any existing router and link data, but resetting the simulation state
     setLsdbData({});
     setRoutingTables({});
-    setPackets([]);
     setProcessedLSPs({});
     
     // Start with empty LSDBs - they will be populated when Hello packets are received
@@ -130,7 +234,7 @@ const RouterSimulator = () => {
     // Save current animation speed for consistent use
     const currentSpeed = animationSpeed;
     
-    // Run the simulation
+    // Run the simulation with the current topology
     runSimulation(edgesForSimulation, routers[0].id, currentSpeed, 
       (animationData) => handleAnimationStep(animationData)
     );
@@ -168,7 +272,11 @@ const RouterSimulator = () => {
     } else if (data.type === 'completed') {
       // Simulation completed - now calculate routing tables using Dijkstra's
       setSimulationStatus('completed');
-      calculateRoutingTables();
+      
+      // Ensure state updates are processed before calculating routing tables
+      setTimeout(() => {
+        calculateRoutingTables();
+      }, 200);
     }
   };
   
@@ -420,11 +528,26 @@ const RouterSimulator = () => {
   const calculateRoutingTables = () => {
     const tables = {};
     
+    // Make sure we have complete LSDB data before calculating routing tables
+    // Check if all routers have an entry in the LSDB
+    const routersWithLSDB = Object.keys(lsdbData);
+    const allRoutersInLSDB = routers.every(router => routersWithLSDB.includes(router.id));
+    
+    if (!allRoutersInLSDB) {
+      console.error("Not all routers have LSDB data, cannot calculate routing tables");
+      return;
+    }
+    
     routers.forEach(router => {
       tables[router.id] = calculateDijkstra(router.id);
     });
     
-    setRoutingTables(tables);
+    // Only update routing tables if we have valid data for all routers
+    if (Object.keys(tables).length === routers.length) {
+      setRoutingTables(tables);
+    } else {
+      console.error("Could not calculate routing tables for all routers");
+    }
   };
   
   // Dijkstra's algorithm for calculating shortest paths
@@ -442,6 +565,15 @@ const RouterSimulator = () => {
     
     distances[startId] = 0;
     
+    // Create a helper to validate link existence and get cost
+    const getLinkCost = (source, target) => {
+      const link = links.find(l => 
+        (l.source === source && l.target === target) || 
+        (l.source === target && l.target === source)
+      );
+      return link ? link.cost : null;
+    };
+    
     while (unvisited.size > 0) {
       // Find the unvisited node with the smallest distance
       let current = null;
@@ -455,7 +587,7 @@ const RouterSimulator = () => {
       }
       
       // If we can't find a node, we're done
-      if (current === null) break;
+      if (current === null || smallestDistance === Infinity) break;
       
       // Remove the current node from unvisited
       unvisited.delete(current);
@@ -463,24 +595,21 @@ const RouterSimulator = () => {
       // Skip if no LSDB data for this router
       if (!lsdbData[current]) continue;
       
-      // Process neighbors
-      for (const [neighbor, adjNodes] of Object.entries(lsdbData[current])) {
-        // Skip if neighbor is the same as current
-        if (neighbor === current) continue;
+      // For each node in the LSDB, check if it's a neighbor (has an entry for the current node)
+      // This properly handles that a router knows about other routers through link state exchange
+      for (const nodeId in lsdbData) {
+        // Skip self-loops
+        if (nodeId === current) continue;
         
-        // Find the cost from current to neighbor
-        const link = links.find(l => 
-          (l.source === current && l.target === neighbor) || 
-          (l.source === neighbor && l.target === current)
-        );
+        // Check if there's a direct link and get the cost
+        const cost = getLinkCost(current, nodeId);
         
-        if (link) {
-          const cost = link.cost;
+        if (cost !== null) {
           const newDistance = distances[current] + cost;
           
-          if (newDistance < distances[neighbor]) {
-            distances[neighbor] = newDistance;
-            previous[neighbor] = current;
+          if (newDistance < distances[nodeId]) {
+            distances[nodeId] = newDistance;
+            previous[nodeId] = current;
           }
         }
       }
@@ -492,9 +621,13 @@ const RouterSimulator = () => {
     routers.forEach(router => {
       if (router.id === startId) return;
       
+      // Skip if no path exists
+      if (distances[router.id] === Infinity) return;
+      
       let path = [];
       let current = router.id;
       
+      // Reconstruct the path
       while (current !== null) {
         path.unshift(current);
         current = previous[current];
@@ -553,8 +686,17 @@ const RouterSimulator = () => {
     // Reset to idle state
     setSimulationStatus('idle');
     
-    // Reset animation speed to default
-    setAnimationSpeed(0.5);
+    // Reset animation speed to default if needed
+    if (animationSpeed !== 0.5) {
+      setAnimationSpeed(0.5);
+    }
+    
+    // Make sure any pending timeouts related to animation are cleared
+    // This helps prevent stale calculations
+    const highestTimeoutId = setTimeout(() => {}, 0);
+    for (let i = 0; i < highestTimeoutId; i++) {
+      clearTimeout(i);
+    }
   };
   
   // Handle speed change
@@ -571,6 +713,8 @@ const RouterSimulator = () => {
   const toggleConnectMode = () => {
     setConnectMode(!connectMode);
     setSelectedRouters([]);
+    setSelectionMode(false);
+    setSelectedElements({routers: [], links: []});
   };
   
   return (
@@ -590,6 +734,23 @@ const RouterSimulator = () => {
         >
           {connectMode ? 'Cancel Connect' : 'Connect Routers'}
         </button>
+        <button 
+          onClick={toggleSelectionMode}
+          className={selectionMode ? 'active' : ''}
+          disabled={simulationStatus === 'running'}
+        >
+          {selectionMode ? 'Cancel Selection' : 'Select Elements'}
+        </button>
+        {selectionMode && (
+          <button 
+            onClick={deleteSelectedElements}
+            className="delete-button"
+            disabled={simulationStatus === 'running' || 
+                     (selectedElements.routers.length === 0 && selectedElements.links.length === 0)}
+          >
+            Delete Selected
+          </button>
+        )}
       </div>
       
       <div className="simulator-container">
@@ -601,6 +762,13 @@ const RouterSimulator = () => {
             simulationStatus={simulationStatus}
             links={links}
           />
+          
+          {selectionMode && (
+            <div className="help-text">
+              <p>Click on routers or links to select them for deletion.</p>
+              <p>Selected items: {selectedElements.routers.length + selectedElements.links.length}</p>
+            </div>
+          )}
         </div>
         
         <div 
@@ -616,8 +784,13 @@ const RouterSimulator = () => {
               y={router.y}
               onDrag={handleRouterDrag}
               onClick={handleRouterClick}
-              isSelected={selectedRouters.includes(router.id)}
+              isSelected={
+                connectMode 
+                  ? selectedRouters.includes(router.id)
+                  : selectionMode && selectedElements.routers.includes(router.id)
+              }
               disabled={simulationStatus === 'running'}
+              connectMode={connectMode}
             />
           ))}
           
@@ -628,9 +801,12 @@ const RouterSimulator = () => {
             return (
               <RouterLink
                 key={link.id}
+                id={link.id}
                 source={source}
                 target={target}
                 cost={link.cost}
+                onClick={handleLinkClick}
+                isSelected={selectionMode && selectedElements.links.includes(link.id)}
               />
             );
           })}
