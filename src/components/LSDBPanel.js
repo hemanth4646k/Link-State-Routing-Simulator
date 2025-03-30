@@ -44,11 +44,39 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     }
   }, [lsdbData, selectedRouter]);
   
+  // Effect to switch to routing table view when simulation completes
+  useEffect(() => {
+    if (simulationStatus === 'completed') {
+      console.log("Simulation completed, routing tables:", Object.keys(routingTables).length);
+      
+      // Check if we have routing tables and switch to that view
+      if (Object.keys(routingTables).length > 0) {
+        console.log("Switching to routing table view");
+        setViewMode('routingTable');
+        
+        // Ensure a router is selected for the routing table view
+        if (selectedRouter === '' || !routingTables[selectedRouter]) {
+          const firstRouter = Object.keys(routingTables).sort()[0];
+          if (firstRouter) {
+            setSelectedRouter(firstRouter);
+          }
+        }
+      }
+    }
+  }, [simulationStatus, routingTables, selectedRouter]);
+  
   const renderRouterSelector = () => {
-    const routerIds = Object.keys(viewMode === 'lsdb' ? lsdbData : routingTables).sort();
+    // Use lsdbData for dropdown when in LSDB view, otherwise use routingTables
+    const dataSource = viewMode === 'lsdb' ? lsdbData : routingTables;
+    const routerIds = Object.keys(dataSource).sort();
     
     if (routerIds.length === 0) {
       return <p>No router data available yet.</p>;
+    }
+    
+    // If current selected router doesn't exist in this view, reset selection
+    if (selectedRouter && !routerIds.includes(selectedRouter)) {
+      setSelectedRouter(routerIds[0]);
     }
     
     return (
@@ -139,34 +167,54 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   };
   
   const renderRoutingTable = () => {
-    if (!selectedRouter || !routingTables[selectedRouter]) {
+    console.log("Rendering routing table, available tables:", Object.keys(routingTables));
+    console.log("Selected router:", selectedRouter);
+    
+    if (!selectedRouter) {
       return <p>Select a router to view its Routing Table.</p>;
+    }
+    
+    if (!routingTables[selectedRouter]) {
+      console.log("No routing table for selected router:", selectedRouter);
+      return <p>No routing table available for Router {selectedRouter}.</p>;
     }
     
     const routingTable = routingTables[selectedRouter];
     const entries = Object.values(routingTable);
     
+    console.log("Routing table entries for router", selectedRouter, ":", entries);
+    
     if (entries.length === 0) {
       return <p>No routing table entries for Router {selectedRouter}.</p>;
     }
     
-    // Sort entries by destination
-    const sortedEntries = [...entries].sort((a, b) => a.destination.localeCompare(b.destination));
+    // Sort entries: self first, then alphabetically by destination
+    const sortedEntries = [...entries].sort((a, b) => {
+      // Always put the entry for self at the top
+      if (a.destination === selectedRouter) return -1;
+      if (b.destination === selectedRouter) return 1;
+      
+      // Otherwise sort alphabetically by destination
+      return a.destination.localeCompare(b.destination);
+    });
     
     return (
       <>
         <h4>Routing Table for Router {selectedRouter}</h4>
+        <div className="routing-table-description">
+          <p>Shows the shortest path to each destination network.</p>
+        </div>
         <table className="routing-table">
           <thead>
             <tr>
               <th>Destination</th>
               <th>Next Hop</th>
-              <th>Cost</th>
+              <th>Total Cost</th>
             </tr>
           </thead>
           <tbody>
             {sortedEntries.map(entry => (
-              <tr key={entry.destination}>
+              <tr key={entry.destination} className={entry.destination === selectedRouter ? 'self-entry' : ''}>
                 <td>{entry.destination}</td>
                 <td>{entry.nextHop}</td>
                 <td>{entry.cost}</td>
@@ -176,6 +224,14 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
         </table>
       </>
     );
+  };
+  
+  const renderContent = () => {
+    if (viewMode === 'lsdb') {
+      return renderLSDB();
+    } else if (viewMode === 'routingTable') {
+      return renderRoutingTable();
+    }
   };
   
   return (
@@ -198,7 +254,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
         <button
           className={viewMode === 'routingTable' ? 'active' : ''}
           onClick={() => setViewMode('routingTable')}
-          disabled={simulationStatus !== 'completed'}
+          disabled={simulationStatus !== 'completed' || Object.keys(routingTables).length === 0}
         >
           Routing Table
         </button>
@@ -207,7 +263,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       {renderRouterSelector()}
       
       <div className="panel-content">
-        {viewMode === 'lsdb' ? renderLSDB() : renderRoutingTable()}
+        {renderContent()}
       </div>
       
       {simulationStatus === 'running' && (

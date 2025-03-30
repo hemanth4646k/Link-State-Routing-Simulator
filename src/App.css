@@ -469,3 +469,105 @@ main {
 .help-text p {
   margin: 5px 0;
 }
+
+/* Panel content styles */
+.panel-content {
+  margin-top: 15px;
+  min-height: 150px;
+  background: white;
+  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #ddd;
+}
+
+/* Router selector styles */
+.router-selector {
+  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.router-selector select {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+/* View mode selector */
+.view-mode-selector {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.view-mode-selector button {
+  flex: 1;
+  padding: 8px;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+.view-mode-selector button.active {
+  background: #4CAF50;
+  color: white;
+}
+
+.view-mode-selector button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Routing Table Styles */
+.routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.routing-table th,
+.routing-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.routing-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.routing-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.routing-table tr:hover {
+  background-color: #f0f0f0;
+}
+
+.routing-table tr.self-entry {
+  background-color: #e6f7ff;
+  font-weight: bold;
+}
+
+.routing-table-description {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+/* Highlight effect for LSDB updates */
+@keyframes highlight {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(255, 255, 0, 0.3); }
+  100% { background-color: transparent; }
+}
+
+.highlight-change {
+  animation: highlight 0.5s ease;
+}

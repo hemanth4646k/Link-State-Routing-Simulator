@@ -273,10 +273,59 @@ const RouterSimulator = () => {
       // Simulation completed - now calculate routing tables using Dijkstra's
       setSimulationStatus('completed');
       
+      // Directly create a basic routing table structure to guarantee it exists
+      const initialRoutingTables = {};
+      routers.forEach(router => {
+        initialRoutingTables[router.id] = {
+          self: {
+            destination: router.id,
+            nextHop: "—", // Em dash to represent direct
+            cost: 0
+          }
+        };
+      });
+      // Set initial tables immediately to ensure the UI has something to display
+      setRoutingTables(initialRoutingTables);
+      
+      // Force LSDB processing to complete before calculating full tables
+      const updatedLSDB = JSON.parse(JSON.stringify(lsdbData));
+      console.log("Final LSDB data:", updatedLSDB);
+      
       // Ensure state updates are processed before calculating routing tables
       setTimeout(() => {
-        calculateRoutingTables();
-      }, 200);
+        console.log("Calculating routing tables after simulation completion");
+        
+        // Directly calculate routing tables based on current state
+        const tables = {};
+        
+        // Calculate tables for each router
+        routers.forEach(router => {
+          tables[router.id] = calculateDijkstraForRouter(router.id, updatedLSDB);
+          
+          // Always ensure there's at least an entry for self
+          if (!tables[router.id]) {
+            tables[router.id] = {};
+          }
+          
+          // Add route to self
+          tables[router.id].self = {
+            destination: router.id,
+            nextHop: "—", // Em dash to represent direct
+            cost: 0
+          };
+        });
+        
+        console.log("Generated routing tables:", tables);
+        
+        // Set the routing tables state
+        setRoutingTables(tables);
+        
+        // Force a re-render after tables are set
+        setTimeout(() => {
+          console.log("Routing tables keys:", Object.keys(tables));
+          setCurrentStep(prev => prev + 1);
+        }, 200);
+      }, 1000);
     }
   };
   
@@ -540,7 +589,7 @@ const RouterSimulator = () => {
     }, 500);
   };
   
-  // Calculate routing tables for all routers
+  // Calculate routing tables for all routers - this is kept for reference but not used directly
   const calculateRoutingTables = () => {
     const tables = {};
     
@@ -554,20 +603,60 @@ const RouterSimulator = () => {
       return;
     }
     
+    // Make sure the LSDB data is complete by checking if every router has knowledge of all links
+    // This is required for accurate routing table calculation
+    let lsdbComplete = true;
+    
+    routers.forEach(router => {
+      // Skip if this router has no LSDB entry
+      if (!lsdbData[router.id]) {
+        lsdbComplete = false;
+        return;
+      }
+      
+      // Check if this router has knowledge of all relevant routers
+      const knownRouters = Object.keys(lsdbData[router.id]);
+      if (knownRouters.length < routers.length) {
+        // If router doesn't know about all other routers, LSDB might be incomplete
+        // This is a simple heuristic and may not be 100% accurate
+        lsdbComplete = false;
+      }
+    });
+    
+    if (!lsdbComplete) {
+      console.warn("LSDB data may be incomplete, routing tables may be inaccurate");
+    }
+    
+    // Now calculate the routing tables
     routers.forEach(router => {
       tables[router.id] = calculateDijkstra(router.id);
     });
     
+    // Add direct routes to self in each routing table
+    routers.forEach(router => {
+      const routingTable = tables[router.id] || {};
+      
+      // Add route to self
+      routingTable.self = {
+        destination: router.id,
+        nextHop: "—", // Em dash to represent direct
+        cost: 0
+      };
+      
+      tables[router.id] = routingTable;
+    });
+    
     // Only update routing tables if we have valid data for all routers
     if (Object.keys(tables).length === routers.length) {
+      console.log("Setting routing tables:", tables);
       setRoutingTables(tables);
     } else {
       console.error("Could not calculate routing tables for all routers");
     }
   };
   
-  // Dijkstra's algorithm for calculating shortest paths
-  const calculateDijkstra = (startId) => {
+  // New function to calculate Dijkstra for a router directly from LSDB and topology
+  const calculateDijkstraForRouter = (startId, currentLSDB) => {
     const distances = {};
     const previous = {};
     const unvisited = new Set();
@@ -581,15 +670,28 @@ const RouterSimulator = () => {
     
     distances[startId] = 0;
     
-    // Create a helper to validate link existence and get cost
-    const getLinkCost = (source, target) => {
-      const link = links.find(l => 
-        (l.source === source && l.target === target) || 
-        (l.source === target && l.target === source)
-      );
-      return link ? link.cost : null;
-    };
+    // Build a graph directly from links for guaranteed correctness
+    const graph = {};
     
+    // Initialize the graph structure
+    routers.forEach(router => {
+      graph[router.id] = {};
+    });
+    
+    // Add all links to the graph with their costs
+    links.forEach(link => {
+      const source = link.source;
+      const target = link.target;
+      const cost = link.cost;
+      
+      if (!graph[source]) graph[source] = {};
+      if (!graph[target]) graph[target] = {};
+      
+      graph[source][target] = cost;
+      graph[target][source] = cost;
+    });
+    
+    // Now run Dijkstra on the complete graph
     while (unvisited.size > 0) {
       // Find the unvisited node with the smallest distance
       let current = null;
@@ -602,30 +704,23 @@ const RouterSimulator = () => {
         }
       }
       
-      // If we can't find a node, we're done
+      // If we can't find a node or all remaining nodes are unreachable, we're done
       if (current === null || smallestDistance === Infinity) break;
       
       // Remove the current node from unvisited
       unvisited.delete(current);
       
-      // Skip if no LSDB data for this router
-      if (!lsdbData[current]) continue;
+      // Check all neighbors in the graph
+      const neighbors = graph[current] || {};
       
-      // For each node in the LSDB, check if it's a neighbor (has an entry for the current node)
-      // This properly handles that a router knows about other routers through link state exchange
-      for (const nodeId in lsdbData) {
-        // Skip self-loops
-        if (nodeId === current) continue;
-        
-        // Check if there's a direct link and get the cost
-        const cost = getLinkCost(current, nodeId);
-        
-        if (cost !== null) {
+      for (const neighbor in neighbors) {
+        const cost = neighbors[neighbor];
+        if (cost !== undefined) {
           const newDistance = distances[current] + cost;
           
-          if (newDistance < distances[nodeId]) {
-            distances[nodeId] = newDistance;
-            previous[nodeId] = current;
+          if (newDistance < distances[neighbor]) {
+            distances[neighbor] = newDistance;
+            previous[neighbor] = current;
           }
         }
       }
@@ -634,23 +729,27 @@ const RouterSimulator = () => {
     // Build the routing table
     const routingTable = {};
     
+    // For each router except the source
     routers.forEach(router => {
-      if (router.id === startId) return;
+      if (router.id === startId) return; // Skip self (handled separately)
       
       // Skip if no path exists
       if (distances[router.id] === Infinity) return;
       
+      // Reconstruct the path to this destination
       let path = [];
       let current = router.id;
       
-      // Reconstruct the path
       while (current !== null) {
         path.unshift(current);
         current = previous[current];
       }
       
+      // If we found a valid path (at least 2 nodes)
       if (path.length > 1) {
-        const nextHop = path[1]; // The next hop is the second node in the path
+        // The next hop is the second node in the path
+        const nextHop = path[1];
+        
         routingTable[router.id] = {
           destination: router.id,
           nextHop,
@@ -660,6 +759,11 @@ const RouterSimulator = () => {
     });
     
     return routingTable;
+  };
+  
+  // Dijkstra's algorithm for calculating shortest paths
+  const calculateDijkstra = (startId) => {
+    return calculateDijkstraForRouter(startId, lsdbData);
   };
   
   // Handle simulation pause
@@ -684,6 +788,12 @@ const RouterSimulator = () => {
     gsap.globalTimeline.clear();
     setPackets([]);
     setCurrentStep(0);
+    
+    // Clear any pending timeouts
+    const highestTimeoutId = setTimeout(() => {}, 0);
+    for (let i = 0; i < highestTimeoutId; i++) {
+      clearTimeout(i);
+    }
   };
   
   // Handle simulation reset - keeps routers and links but resets simulation data
@@ -707,8 +817,7 @@ const RouterSimulator = () => {
       setAnimationSpeed(0.5);
     }
     
-    // Make sure any pending timeouts related to animation are cleared
-    // This helps prevent stale calculations
+    // Clear any pending timeouts
     const highestTimeoutId = setTimeout(() => {}, 0);
     for (let i = 0; i < highestTimeoutId; i++) {
       clearTimeout(i);
