@@ -3,68 +3,76 @@ import React from 'react';
 const RouterLink = ({ id, source, target, cost, onClick, isSelected }) => {
   if (!source || !target) return null;
   
-  const sourceX = source.x + 40; // Center of router
-  const sourceY = source.y + 40;
-  const targetX = target.x + 40;
-  const targetY = target.y + 40;
+  // Calculate center points of source and target routers
+  const sourceSize = window.innerWidth <= 600 ? 60 : 80; // Adjust for responsive router size
+  const targetSize = window.innerWidth <= 600 ? 60 : 80;
   
-  // Calculate midpoint for the cost label
-  const midX = (sourceX + targetX) / 2;
-  const midY = (sourceY + targetY) / 2;
+  const sourceCenter = {
+    x: source.x + sourceSize / 2,
+    y: source.y + sourceSize / 2
+  };
   
-  // Calculate offset for the cost label to avoid overlapping with the line
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const angle = Math.atan2(dy, dx);
-  const offsetX = Math.sin(angle) * 15;
-  const offsetY = -Math.cos(angle) * 15;
+  const targetCenter = {
+    x: target.x + targetSize / 2,
+    y: target.y + targetSize / 2
+  };
   
+  // Calculate the angle for rotation
+  const dx = targetCenter.x - sourceCenter.x;
+  const dy = targetCenter.y - sourceCenter.y;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+  
+  // Calculate the distance between centers
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  // Handle link click
   const handleClick = (e) => {
     e.stopPropagation();
-    if (onClick) onClick(id);
+    if (onClick) {
+      onClick(id);
+    }
+  };
+  
+  // Handle touch events for mobile
+  const handleTouch = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (onClick) {
+      onClick(id);
+    }
+  };
+  
+  // Position for the cost label - midpoint of the link
+  const labelPos = {
+    x: sourceCenter.x + dx / 2 - 10,
+    y: sourceCenter.y + dy / 2 - 10
   };
   
   return (
-    <div className="router-link-container">
-      <svg 
-        width="100%" 
-        height="100%" 
-        className="router-link-svg"
-        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-      >
-        <line
-          x1={sourceX}
-          y1={sourceY}
-          x2={targetX}
-          y2={targetY}
-          stroke={isSelected ? "#ff4500" : "#666"}
-          strokeWidth={isSelected ? 3 : 2}
-          className="router-link-line"
-          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-          onClick={handleClick}
-        />
-      </svg>
-      <div 
-        className={`link-cost ${isSelected ? 'selected' : ''}`}
+    <>
+      <div
+        className={`router-link ${isSelected ? 'selected' : ''}`}
         style={{
-          position: 'absolute',
-          left: `${midX + offsetX - 15}px`,
-          top: `${midY + offsetY - 15}px`,
-          backgroundColor: isSelected ? "#fff3cd" : "#fff",
-          border: isSelected ? "2px solid #ff4500" : "1px solid #ccc",
-          zIndex: 5,
-          padding: '2px 8px',
-          borderRadius: '10px',
-          fontSize: '12px',
-          userSelect: 'none',
-          cursor: 'pointer',
-          pointerEvents: 'auto'
+          left: `${sourceCenter.x}px`,
+          top: `${sourceCenter.y}px`,
+          width: `${distance}px`,
+          transform: `rotate(${angle}deg)`,
         }}
         onClick={handleClick}
+        onTouchEnd={handleTouch}
+      />
+      <div
+        className={`router-link-cost ${isSelected ? 'selected' : ''}`}
+        style={{
+          left: `${labelPos.x}px`,
+          top: `${labelPos.y}px`,
+        }}
+        onClick={handleClick}
+        onTouchEnd={handleTouch}
       >
         {cost}
       </div>
-    </div>
+    </>
   );
 };
 

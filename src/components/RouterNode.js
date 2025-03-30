@@ -1,86 +1,155 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 
 const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMode }) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
-  const startPosRef = useRef({ x: 0, y: 0 });
   const nodeRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasMoved, setHasMoved] = useState(false);
   
   const handleMouseDown = (e) => {
-    e.preventDefault(); // Prevent text selection during drag
-    if (disabled || connectMode) return; // Don't allow dragging in connect mode
+    // Prevent default to stop text selection
+    e.preventDefault();
     
-    // Record initial position for dragging
-    startPosRef.current = { 
-      x: e.clientX - x, 
-      y: e.clientY - y 
+    if (disabled) return;
+    
+    // If in connect mode, just handle the click
+    if (connectMode) {
+      onClick(id);
+      return;
+    }
+    
+    // Otherwise, prepare for dragging
+    setIsDragging(true);
+    setHasMoved(false);
+    
+    // Store starting positions
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const routerX = x;
+    const routerY = y;
+    
+    const handleMouseMove = (moveEvent) => {
+      // Calculate distance moved
+      const dx = Math.abs(moveEvent.clientX - startX);
+      const dy = Math.abs(moveEvent.clientY - startY);
+      
+      // If moved more than 3px, consider it a drag
+      if (dx > 3 || dy > 3) {
+        setHasMoved(true);
+      }
+      
+      // Calculate new position
+      const newX = routerX + (moveEvent.clientX - startX);
+      const newY = routerY + (moveEvent.clientY - startY);
+      
+      // Update position via callback
+      onDrag(id, newX, newY);
     };
     
-    setIsDragging(true);
-    setHasMovedDuringDrag(false);
-    
-    // Add event listeners for mouse movement and up
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-  
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    
-    // Calculate new position
-    const newX = Math.max(0, e.clientX - startPosRef.current.x);
-    const newY = Math.max(0, e.clientY - startPosRef.current.y);
-    
-    // Only update if position has changed
-    if (newX !== x || newY !== y) {
-      setHasMovedDuringDrag(true);
-      // Update position
-      onDrag(id, newX, newY);
-    }
-  };
-  
-  const handleMouseUp = (e) => {
-    if (isDragging) {
-      // Only trigger click if we didn't drag significantly
-      if (!hasMovedDuringDrag && onClick) {
+    const handleMouseUp = (upEvent) => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      // If not moved significantly, handle as a click
+      if (!hasMoved) {
         onClick(id);
       }
       
       setIsDragging(false);
-      
-      // Remove event listeners
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    }
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
   
-  // Handle click for non-dragging mode (like connect mode)
-  const handleClick = (e) => {
-    if (connectMode && onClick) {
+  // Touch event handler for mobile devices
+  const handleTouchStart = (e) => {
+    if (disabled) return;
+    
+    // If in connect mode, just handle the click/tap
+    if (connectMode) {
+      onClick(id);
+      return;
+    }
+    
+    // Prevent scrolling
+    e.preventDefault();
+    
+    // Prepare for dragging
+    setIsDragging(true);
+    setHasMoved(false);
+    
+    // Store starting positions
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+    const startY = touch.clientY;
+    const routerX = x;
+    const routerY = y;
+    
+    const handleTouchMove = (moveEvent) => {
+      // Prevent scrolling
+      moveEvent.preventDefault();
+      
+      const touch = moveEvent.touches[0];
+      
+      // Calculate distance moved
+      const dx = Math.abs(touch.clientX - startX);
+      const dy = Math.abs(touch.clientY - startY);
+      
+      // If moved more than 3px, consider it a drag
+      if (dx > 3 || dy > 3) {
+        setHasMoved(true);
+      }
+      
+      // Calculate new position
+      const newX = routerX + (touch.clientX - startX);
+      const newY = routerY + (touch.clientY - startY);
+      
+      // Update position via callback
+      onDrag(id, newX, newY);
+    };
+    
+    const handleTouchEnd = (endEvent) => {
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      
+      // If not moved significantly, handle as a tap
+      if (!hasMoved) {
+        onClick(id);
+      }
+      
+      setIsDragging(false);
+    };
+    
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+  };
+  
+  // Handle keyboard events for accessibility
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
       onClick(id);
     }
   };
   
-  // Determine the appropriate cursor based on the current mode
-  const getCursor = () => {
-    if (disabled) return 'not-allowed';
-    if (connectMode) return 'pointer'; // Use pointer cursor for connecting
-    return isDragging ? 'grabbing' : 'grab'; // Use grab cursors for dragging
-  };
-  
   return (
-    <div 
+    <div
       ref={nodeRef}
+      id={`router-${id}`}
       className={`router-node ${isSelected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
-      style={{ 
-        left: `${x}px`, 
+      style={{
+        left: `${x}px`,
         top: `${y}px`,
-        cursor: getCursor()
+        cursor: connectMode ? 'pointer' : disabled ? 'not-allowed' : isDragging ? 'grabbing' : 'grab'
       }}
       onMouseDown={handleMouseDown}
-      onClick={connectMode ? handleClick : undefined}
+      onTouchStart={handleTouchStart}
+      onKeyDown={handleKeyDown}
+      role="button"
+      aria-label={`Router ${id}`}
+      tabIndex={0}
     >
-      Router {id}
+      {id}
     </div>
   );
 };

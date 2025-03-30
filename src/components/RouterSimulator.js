@@ -140,9 +140,16 @@ const RouterSimulator = () => {
   const toggleSelectionMode = () => {
     // Clear existing selections when toggling
     setSelectedElements({routers: [], links: []});
-    setSelectionMode(!selectionMode);
-    setConnectMode(false);
-    setSelectedRouters([]);
+    
+    // Toggle the mode
+    const newSelectionMode = !selectionMode;
+    setSelectionMode(newSelectionMode);
+    
+    // Disable connect mode if we're entering selection mode
+    if (newSelectionMode) {
+      setConnectMode(false);
+      setSelectedRouters([]);
+    }
   };
   
   // Delete selected elements
@@ -862,7 +869,7 @@ const RouterSimulator = () => {
         <button 
           onClick={toggleConnectMode}
           className={connectMode ? 'active' : ''}
-          disabled={simulationStatus === 'running'}
+          disabled={simulationStatus === 'running' || selectionMode}
         >
           {connectMode ? 'Cancel Connect' : 'Connect Routers'}
         </button>
@@ -871,7 +878,7 @@ const RouterSimulator = () => {
           className={selectionMode ? 'active' : ''}
           disabled={simulationStatus === 'running'}
         >
-          {selectionMode ? 'Cancel Selection' : 'Select Elements'}
+          {selectionMode ? 'Exit Selection Mode' : 'Selection Mode'}
         </button>
         {selectionMode && (
           <button 
@@ -898,14 +905,16 @@ const RouterSimulator = () => {
           
           {selectionMode && (
             <div className="help-text">
+              <p><strong>Selection Mode Active</strong></p>
               <p>Click on routers or links to select them for deletion.</p>
+              <p>Then click the "Delete Selected" button to remove them.</p>
               <p>Selected items: {selectedElements.routers.length + selectedElements.links.length}</p>
             </div>
           )}
         </div>
         
         <div 
-          className="simulator-stage" 
+          className={`simulator-stage ${selectionMode ? 'selection-mode-active' : ''}`}
           ref={stageRef}
         >
           {/* Render router nodes */}
