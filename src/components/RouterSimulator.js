@@ -336,7 +336,24 @@ const RouterSimulator = () => {
     // Add to state
     setPackets(prev => [...prev, newPacket]);
     
-    // Wait for DOM update
+    // Calculate distance between routers for adaptive timing
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Calculate appropriate animation duration based on distance
+    // Cap between 0.3 seconds and 8 seconds (depending on speed)
+    const minDuration = 0.3;
+    const maxDuration = 8 / animationSpeed;
+    
+    // Calculate duration based on distance and animation speed
+    // This ensures that packets travel at a reasonable speed
+    const baseDuration = Math.min(maxDuration, Math.max(minDuration, animationDuration / 1000));
+    
+    // Calculate final duration - for very short distances, use minimum duration
+    const durationInSeconds = distance < 50 ? minDuration : baseDuration;
+    
+    // Wait for DOM update - reduced from 50ms to 20ms for faster response
     setTimeout(() => {
       // Find packet element
       const packetEl = document.getElementById(packetId);
@@ -346,10 +363,6 @@ const RouterSimulator = () => {
         return;
       }
       
-      // Use fixed duration from animationDuration parameter
-      // This ensures all packets travel at the same speed regardless of distance
-      const durationInSeconds = animationDuration / 1000;
-      
       // Animate directly to target with smoother easing
       gsap.to(packetEl, {
         left: `${toX - halfPacketSize}px`, // Adjust for packet size
@@ -357,7 +370,7 @@ const RouterSimulator = () => {
         duration: durationInSeconds,
         ease: "power1.inOut", // Linear with slight ease at ends
         onComplete: () => {
-          // Remove packet
+          // Remove packet immediately to prevent memory leaks
           setPackets(prev => prev.filter(p => p.id !== packetId));
           
           // Update LSDB based on packet type
@@ -384,10 +397,13 @@ const RouterSimulator = () => {
           }
           
           // Call external callback if provided to signal completion for step sequencing
-          if (externalCallback) externalCallback();
+          if (externalCallback) {
+            // Call the callback immediately to avoid waiting
+            externalCallback();
+          }
         }
       });
-    }, 50);
+    }, 20); // Reduced waiting time for DOM update from 50ms to 20ms
   };
   
   // Process a Hello packet from one router to another
@@ -518,10 +534,10 @@ const RouterSimulator = () => {
       timestamp: Date.now() // Add timestamp to ensure state update is detected
     });
     
-    // Clear the highlight after 800ms
+    // Clear the highlight after 500ms (reduced from 800ms for faster transitions)
     setTimeout(() => {
       setCurrentHighlight(null);
-    }, 800);
+    }, 500);
   };
   
   // Calculate routing tables for all routers

@@ -155,12 +155,12 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
   // Extract all animation instructions from flooding algorithm
   const instructions = extractAnimationInstructions(edges, startNode);
   
-  // Set up variables for animation timing
-  const stepInterval = 5000 / speed; // Time between major steps
-  const packetAnimationDuration = 2000 / speed; // Duration for packet animations, longer for better visibility at slow speeds
+  // Set up variables for animation timing - reduced for faster transitions
+  const stepInterval = 3000 / speed; // Reduced from 5000 to 3000ms between major steps
+  const packetAnimationDuration = 1500 / speed; // Reduced from 2000 to 1500ms for packet animations
   
   // For very slow speeds, cap the maximum animation duration
-  const cappedAnimationDuration = Math.min(packetAnimationDuration, 10000); // Cap at 10 seconds per animation
+  const cappedAnimationDuration = Math.min(packetAnimationDuration, 8000); // Cap at 8 seconds (reduced from 10s)
   
   // Group instructions by step
   const stepGroups = instructions.reduce((acc, inst) => {
@@ -170,8 +170,8 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
   }, {});
   
   // Fixed timing parameters (in milliseconds)
-  const fixedPacketTravelTime = 1500 / speed; // Consistent travel time for all packets
-  const fixedPacketInterval = 300 / speed; // Fixed interval between packets from same sender
+  const fixedPacketTravelTime = 1200 / speed; // Reduced from 1500 to 1200ms travel time
+  const fixedPacketInterval = 250 / speed; // Reduced from 300 to 250ms interval between packets
   
   // Process steps sequentially using a recursive function to ensure steps don't overlap
   const processStep = (stepIndex) => {
@@ -241,15 +241,15 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
         
         // Check if this is the last step
         if (stepIndex === stepNumbers.length - 1) {
-          // Signal completion with a slightly longer delay to ensure all state updates are processed
+          // Signal completion with minimal delay (reduced from 1000ms to 500ms)
           setTimeout(() => {
             onStep({ 
               type: 'completed',
               step: parseInt(currentStepNumber)
             });
-          }, 1000); // Increased from 500ms to 1000ms
+          }, 500); 
         } else {
-          // Move to the next step with a delay
+          // Move to the next step with reduced delay
           setTimeout(() => {
             processStep(stepIndex + 1);
           }, stepInterval);
@@ -270,18 +270,18 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
       
       // Check if this is the last step
       if (stepIndex === stepNumbers.length - 1) {
-        // Signal completion with a slightly longer delay to ensure all state updates are processed
+        // Signal completion with minimal delay
         setTimeout(() => {
           onStep({ 
             type: 'completed',
             step: parseInt(currentStepNumber)
           });
-        }, 1000); // Increased from 500ms to 1000ms
+        }, 500); // Reduced from 1000ms to 500ms
       } else {
-        // Move to the next step with a delay
+        // Move to the next step with reduced delay
         setTimeout(() => {
           processStep(stepIndex + 1);
-        }, stepInterval);
+        }, Math.min(1000, stepInterval)); // Use at most 1000ms between empty steps
       }
       return;
     }
