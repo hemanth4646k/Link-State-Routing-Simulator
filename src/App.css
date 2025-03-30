@@ -1,5 +1,8 @@
 .App {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
 }
 
 .App-logo {
@@ -15,13 +18,13 @@
 
 .App-header {
   background-color: #282c34;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: calc(10px + 1vmin);
   color: white;
+  padding: 1rem;
 }
 
 .App-link {
@@ -35,4 +38,340 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.simulator-container {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 100px);
+}
+
+.left-panel {
+  width: 250px;
+  background-color: #f5f5f5;
+  border-right: 1px solid #ccc;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.right-panel {
+  width: 250px;
+  background-color: #f5f5f5;
+  border-left: 1px solid #ccc;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.simulator-stage {
+  flex: 1;
+  position: relative;
+  background-color: #f9f9f9;
+  overflow: hidden;
+}
+
+.toolbox {
+  padding: 10px;
+  background-color: #ececec;
+  border-bottom: 1px solid #ccc;
+}
+
+.router-node {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-color: #4CAF50;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  cursor: grab;
+  user-select: none;
+  z-index: 10;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.router-link {
+  position: absolute;
+  height: 4px;
+  background-color: #555;
+  transform-origin: left center;
+  z-index: 5;
+  border-radius: 2px;
+}
+
+.router-link::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  background-color: transparent;
+}
+
+.router-link-cost {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 12px;
+  z-index: 6;
+}
+
+.lsp-packet, .hello-packet {
+  position: absolute;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: pulse 1.5s infinite;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+  will-change: transform, left, top;
+}
+
+.lsp-packet {
+  background-color: #ff9800;
+  background: radial-gradient(circle at 35% 35%, #ffb74d, #f57c00);
+  border: 2px solid #f57c00;
+}
+
+.hello-packet {
+  background-color: #2196F3;
+  background: radial-gradient(circle at 35% 35%, #64b5f6, #1976d2);
+  border: 2px solid #1976d2;
+}
+
+.lsp-packet::after, .hello-packet::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  z-index: -1;
+  opacity: 0.4;
+  filter: blur(8px);
+  background: inherit;
+  transform: scale(1.2);
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 1; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+
+.control-panel {
+  padding: 10px;
+  background-color: #f0f0f0;
+  border-top: 1px solid #ccc;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.control-panel button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background-color: #4CAF50;
+  color: white;
+  cursor: pointer;
+}
+
+.control-panel button:hover {
+  background-color: #45a049;
+}
+
+.control-panel button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.speed-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 15px 0;
+  width: 100%;
+}
+
+.speed-control label {
+  font-weight: bold;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.speed-control input[type="range"] {
+  width: 100%;
+  height: 8px;
+  -webkit-appearance: none;
+  background: #ddd;
+  outline: none;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.speed-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4CAF50;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.speed-control input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4CAF50;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.speed-control input[type="range"]::-webkit-slider-thumb:hover {
+  background: #45a049;
+  transform: scale(1.1);
+}
+
+.speed-control span {
+  font-weight: bold;
+  color: #4CAF50;
+  min-width: 36px;
+  text-align: center;
+}
+
+.speed-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 12px;
+  color: #666;
+}
+
+.speed-labels span:first-child {
+  text-align: left;
+}
+
+.speed-labels span:last-child {
+  text-align: right;
+}
+
+.highlight-change {
+  animation: flash 0.8s ease-in-out;
+  position: relative;
+  z-index: 10;
+}
+
+.highlight-change td {
+  position: relative;
+  background-color: rgba(255, 235, 59, 0.3);
+}
+
+.highlight-change td::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 152, 0, 0.2);
+  animation: flash-background 0.8s ease-in-out;
+}
+
+@keyframes flash {
+  0% { transform: scale(1); }
+  20% { transform: scale(1.05); background-color: rgba(255, 235, 59, 0.7); }
+  100% { transform: scale(1); }
+}
+
+@keyframes flash-background {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+.lsdb-table, .routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 14px;
+}
+
+.lsdb-table th, .lsdb-table td,
+.routing-table th, .routing-table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: left;
+}
+
+.lsdb-table th, .routing-table th {
+  background-color: #f2f2f2;
+}
+
+.lsdb-table tr:nth-child(even),
+.routing-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.current-step {
+  margin: 10px 0 15px;
+  padding: 10px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  border-left: 4px solid #4CAF50;
+}
+
+.current-step h4 {
+  margin: 0 0 5px;
+  font-size: 14px;
+  color: #2e7d32;
+}
+
+.step-indicator {
+  font-weight: bold;
+  font-size: 16px;
+  color: #1b5e20;
+  animation: pulse-subtle 1.5s infinite;
+}
+
+/* Reset for simulation */
+.simulator-wrapper button {
+  margin: 5px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #4CAF50;
+  color: white;
+  font-weight: normal;
+}
+
+.simulator-wrapper button:hover {
+  background-color: #45a049;
+}
+
+.simulator-wrapper button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }

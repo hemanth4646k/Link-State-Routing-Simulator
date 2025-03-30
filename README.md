@@ -1,70 +1,58 @@
-# Getting Started with Create React App
+# Link State Routing Simulator
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A visual simulator for link state routing protocols, using drag-and-drop routers and animated packet transmission.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- Drag and drop routers onto the simulation stage
+- Connect routers with links and specify link costs
+- Run animated simulations of the link state routing algorithm
+- View Link State Database (LSDB) for each router
+- View routing tables calculated from the LSDB using Dijkstra's algorithm
+- Control simulation speed with a slider
+- Pause, resume, and end simulations
 
-### `npm start`
+## How to Use
 
-Runs the app in the development mode.\
+1. **Add Routers**: Drag routers from the toolbox onto the simulation stage
+2. **Connect Routers**: 
+   - Click the "Connect Routers" button
+   - Click on the first router you want to connect
+   - Click on the second router
+   - Enter the link cost in the modal that appears
+3. **Run Simulation**:
+   - Click "Start Simulation" to begin the link state routing process
+   - Watch as LSP packets are transmitted between routers
+   - The Link State Database for each router is updated as packets are received
+4. **View Results**:
+   - After the simulation completes, you can view either the LSDB or routing tables
+   - Select a router from the dropdown to see its specific information
+5. **Control Options**:
+   - Adjust animation speed using the slider
+   - Pause/Resume simulation as needed
+   - End simulation to reset and start over
+
+## Technical Details
+
+This simulator demonstrates how link state routing protocols work:
+
+1. Each router discovers its neighbors
+2. Routers create Link State Packets (LSPs) containing their neighbor information
+3. Routers flood these LSPs to their neighbors
+4. Each router builds a complete map of the network topology
+5. Routers compute the shortest paths using Dijkstra's algorithm
+
+## Running the Project
+
+```
+npm install
+npm start
+```
+
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Technologies Used
 
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- React 19
+- GSAP for animations
+- JavaScript for routing algorithms
