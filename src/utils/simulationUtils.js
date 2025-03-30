@@ -10,7 +10,7 @@ const UPDATE_REGEX = /Node ([A-Z]) updates table with (LSP[A-Z]: \[[^\]]+\]); Se
  * Extract animation instructions from flooding algorithm
  * @param {Array} edges - Array of [source, target, cost] arrays
  * @param {string} startNode - ID of the starting node
- * @returns {Array} - List of animation instructions in sequence
+ * @returns {Object} - Object containing instructions and captured logs
  */
 const extractAnimationInstructions = (edges, startNode) => {
   const instructions = [];
@@ -19,7 +19,8 @@ const extractAnimationInstructions = (edges, startNode) => {
   // Override console.log to capture all output
   const originalConsoleLog = console.log;
   console.log = (...args) => {
-    logs.push(args.join(' '));
+    const logMessage = args.join(' ');
+    logs.push(logMessage);
     // originalConsoleLog(...args); // Uncomment to see logs in console
   };
   
@@ -141,7 +142,7 @@ const extractAnimationInstructions = (edges, startNode) => {
     console.log = originalConsoleLog;
   }
   
-  return instructions;
+  return { instructions, logs };
 };
 
 /**
@@ -150,10 +151,16 @@ const extractAnimationInstructions = (edges, startNode) => {
  * @param {string} startNode - ID of the starting node
  * @param {number} speed - Animation speed multiplier
  * @param {Function} onStep - Callback for animation steps
+ * @param {Function} onLogUpdate - Callback for log updates
  */
-export const runSimulation = (edges, startNode, speed, onStep) => {
+export const runSimulation = (edges, startNode, speed, onStep, onLogUpdate) => {
   // Extract all animation instructions from flooding algorithm
-  const instructions = extractAnimationInstructions(edges, startNode);
+  const { instructions, logs } = extractAnimationInstructions(edges, startNode);
+  
+  // Send logs back to the component
+  if (onLogUpdate) {
+    onLogUpdate(logs);
+  }
   
   // Set up variables for animation timing - reduced for faster transitions
   const stepInterval = 3000 / speed; // Reduced from 5000 to 3000ms between major steps
@@ -249,64 +256,79 @@ export const runSimulation = (edges, startNode, speed, onStep) => {
             });
           }, 500); 
         } else {
-          // Move to the next step with reduced delay
+          // After a delay, process the next step
+          // We'll add a maximum wait of 1000ms between steps
+          // This ensures that even with very slow speeds, the simulation doesn't stall
           setTimeout(() => {
             processStep(stepIndex + 1);
-          }, stepInterval);
+          }, Math.min(stepInterval, 1000));
         }
       }
     };
     
-    // If there are no packet animations, move directly to updates
+    // Process packet animations by sender to avoid visual overlap
     if (totalAnimations === 0) {
-      if (updateInstructions.length > 0) {
-        updateInstructions.forEach(instruction => {
-          onStep({
-            ...instruction,
-            step: parseInt(currentStepNumber)
-          });
-        });
-      }
+      // If there are no animations in this step, move to the next step immediately
+      onAnimationComplete();
+    } else {
+      // Process animations for each sender one by one
+      let senderIndex = 0;
+      const senders = Object.keys(packetsBySender);
       
-      // Check if this is the last step
-      if (stepIndex === stepNumbers.length - 1) {
-        // Signal completion with minimal delay
-        setTimeout(() => {
-          onStep({ 
-            type: 'completed',
-            step: parseInt(currentStepNumber)
-          });
-        }, 500); // Reduced from 1000ms to 500ms
-      } else {
-        // Move to the next step with reduced delay
-        setTimeout(() => {
-          processStep(stepIndex + 1);
-        }, Math.min(1000, stepInterval)); // Use at most 1000ms between empty steps
-      }
-      return;
-    }
-    
-    // Schedule packets with synchronized timing
-    Object.entries(packetsBySender).forEach(([sender, instructions]) => {
-      // For each sender, schedule its packets with a fixed interval
-      instructions.forEach((instruction, index) => {
-        const packetStartTime = index * fixedPacketInterval;
+      const processSender = () => {
+        if (senderIndex >= senders.length) return; // All senders processed
         
-        setTimeout(() => {
+        const sender = senders[senderIndex];
+        const instructions = packetsBySender[sender];
+        
+        // Process each packet from this sender
+        let instructionIndex = 0;
+        
+        const processPacket = () => {
+          if (instructionIndex >= instructions.length) {
+            // This sender's packets are all processed, move to next sender
+            senderIndex++;
+            processSender();
+            return;
+          }
+          
+          const instruction = instructions[instructionIndex];
+          
+          // Create a callback for this specific packet animation
+          const onPacketComplete = () => {
+            // Signal animation completion to track overall progress
+            onAnimationComplete();
+          };
+          
+          // Send packet animation to UI
           onStep({
             ...instruction,
             animationDuration: fixedPacketTravelTime,
-            step: parseInt(currentStepNumber),
-            onComplete: onAnimationComplete // Pass the callback function for tracking completion
+            onComplete: onPacketComplete
           });
-        }, packetStartTime);
-      });
-    });
+          
+          // Increment instruction index for next packet
+          instructionIndex++;
+          
+          // Schedule next packet after an interval
+          setTimeout(processPacket, fixedPacketInterval);
+        };
+        
+        // Start processing this sender's packets
+        processPacket();
+      };
+      
+      // Begin processing senders
+      processSender();
+    }
   };
   
-  // Start processing steps from the first step
+  // Start the simulation with step 0
   processStep(0);
 };
+
+// Export for testing
+export const _extractAnimationInstructions = extractAnimationInstructions;
 
 // Mock implementation if the real flooding.js functions are not available
 if (typeof sendHelloPackets !== 'function') {

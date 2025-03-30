@@ -28,6 +28,7 @@ const RouterSimulator = () => {
   const [currentHighlight, setCurrentHighlight] = useState(null);
   const [currentStep, setCurrentStep] = useState(0); // Track current simulation step
   const [processedLSPs, setProcessedLSPs] = useState({}); // Track which LSPs each router has processed
+  const [simulationLogs, setSimulationLogs] = useState([]); // Store logs from flooding.js
   
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
@@ -204,6 +205,7 @@ const RouterSimulator = () => {
     setCurrentStep(0);
     setCurrentHighlight(null);
     setPackets([]);
+    setSimulationLogs([]); // Clear previous logs
     
     setSimulationStatus('running');
     
@@ -235,8 +237,12 @@ const RouterSimulator = () => {
     const currentSpeed = animationSpeed;
     
     // Run the simulation with the current topology
-    runSimulation(edgesForSimulation, routers[0].id, currentSpeed, 
-      (animationData) => handleAnimationStep(animationData)
+    runSimulation(
+      edgesForSimulation, 
+      routers[0].id, 
+      currentSpeed, 
+      (animationData) => handleAnimationStep(animationData),
+      (logs) => setSimulationLogs(logs) // Handle logs from simulationUtils
     );
     
     // Set the GSAP timeline speed to match the selected animation speed
@@ -808,6 +814,7 @@ const RouterSimulator = () => {
     setPackets([]);
     setCurrentStep(0);
     setCurrentHighlight(null);
+    setSimulationLogs([]);
     
     // Reset to idle state
     setSimulationStatus('idle');
@@ -886,6 +893,7 @@ const RouterSimulator = () => {
             currentHighlight={currentHighlight}
             simulationStatus={simulationStatus}
             links={links}
+            simulationLogs={simulationLogs}
           />
           
           {selectionMode && (

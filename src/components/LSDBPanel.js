@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
-const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus, links }) => {
+const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus, links, simulationLogs = [] }) => {
   const [selectedRouter, setSelectedRouter] = useState('');
   const [viewMode, setViewMode] = useState('lsdb'); // 'lsdb' or 'routingTable'
   const [flashingRow, setFlashingRow] = useState(null);
+  const [showLogs, setShowLogs] = useState(false);
   
   // Helper to check if this entry should be highlighted
   const shouldHighlight = (routerId, nodeId) => {
@@ -64,6 +65,13 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       }
     }
   }, [simulationStatus, routingTables, selectedRouter]);
+  
+  // Effect to automatically expand logs when simulation is running
+  useEffect(() => {
+    if (simulationStatus === 'running') {
+      setShowLogs(true);
+    }
+  }, [simulationStatus]);
   
   const renderRouterSelector = () => {
     // Use lsdbData for dropdown when in LSDB view, otherwise use routingTables
@@ -234,6 +242,35 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     }
   };
   
+  const renderSimulationLogs = () => {
+    return (
+      <div className="simulation-logs">
+        <div className="logs-header" onClick={() => setShowLogs(!showLogs)}>
+          <h4>
+            <span className="toggle-icon">{showLogs ? '▼' : '▶'}</span> 
+            Simulation Logs
+          </h4>
+        </div>
+        
+        {showLogs && (
+          <div className="logs-content">
+            {simulationLogs.length === 0 ? (
+              <p className="no-logs">No logs available yet.</p>
+            ) : (
+              <ul className="logs-list">
+                {[...simulationLogs].reverse().map((log, index) => (
+                  <li key={index} className="log-item">
+                    {log}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+  
   return (
     <div className="lsdb-panel">
       <h3>{
@@ -266,11 +303,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
         {renderContent()}
       </div>
       
-      {simulationStatus === 'running' && (
-        <div className="simulation-status-message">
-          <p>Watch as routers exchange topology information...</p>
-        </div>
-      )}
+      {simulationStatus !== 'idle' && renderSimulationLogs()}
     </div>
   );
 };
