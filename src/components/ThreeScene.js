@@ -26,72 +26,125 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
   // Get Three.js context
   const { camera, raycaster, mouse, gl } = useThree();
   
-  // Create ref for the ground plane
-  const plane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  // Variables for dragging
+  const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+  const dragOffset = useRef(new THREE.Vector3());
   
-  // Handle pointer down event
+  // Method to start dragging
+  const startDragging = (e) => {
+    if (!isSelected || !selectionMode) return;
+    
+    // Prevent event propagation
+    e.stopPropagation();
+    setIsDragging(true);
+    
+    // Update mouse coordinates for raycaster
+    raycaster.setFromCamera(mouse, camera);
+    
+    // Create a drag plane at the router's height, aligned with the view
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+    
+    // If looking from directly above, use horizontal plane
+    if (Math.abs(cameraDirection.y) > 0.9) {
+      dragPlane.current.normal.set(0, 1, 0);
+    } else {
+      // Otherwise create a plane more aligned with the view
+      dragPlane.current.normal.set(cameraDirection.x, 0, cameraDirection.z).normalize();
+    }
+    
+    // Set the plane to pass through the router
+    dragPlane.current.constant = -position[1];
+    
+    // Find the intersection with the plane
+    const intersection = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(dragPlane.current, intersection)) {
+      // Calculate offset between intersection and router position
+      dragOffset.current.copy(intersection).sub(new THREE.Vector3(...position));
+      
+      // Set up UI and capture pointer
+      gl.domElement.style.cursor = 'grabbing';
+      gl.domElement.setPointerCapture(e.pointerId);
+      
+      // Add event listeners for movement and release
+      gl.domElement.addEventListener('pointermove', handleDrag);
+      gl.domElement.addEventListener('pointerup', stopDragging);
+    }
+  };
+  
+  // Method to handle dragging movement
+  const handleDrag = (e) => {
+    if (!isDragging) return;
+    
+    // Update the raycaster with current mouse position
+    raycaster.setFromCamera(mouse, camera);
+    
+    // Find the new intersection with the drag plane
+    const intersection = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(dragPlane.current, intersection)) {
+      // Calculate new position by subtracting the offset
+      const newPosition = new THREE.Vector3().copy(intersection).sub(dragOffset.current);
+      
+      // Keep the y-coordinate consistent
+      newPosition.y = position[1];
+      
+      // Update position via parent component
+      onDrag(id, newPosition.x, newPosition.z);
+    }
+  };
+  
+  // Method to stop dragging
+  const stopDragging = (e) => {
+    if (!isDragging) return;
+    
+    setIsDragging(false);
+    gl.domElement.style.cursor = 'grab';
+    
+    // Remove event listeners
+    gl.domElement.removeEventListener('pointermove', handleDrag);
+    gl.domElement.removeEventListener('pointerup', stopDragging);
+    
+    // Release pointer capture
+    if (e.pointerId) {
+      gl.domElement.releasePointerCapture(e.pointerId);
+    }
+  };
+  
+  // Handle all pointer interactions
   const handlePointerDown = (e) => {
-    // Only allow interaction when not disabled or in selection mode
+    // If disabled and not in selection mode, do nothing
     if (disabled && !selectionMode) return;
     
+    // In connect mode, just register click
     if (connectMode) {
-      // In connect mode, just register a click
       onClick(id);
       return;
     }
     
-    // Selection mode logic
+    // In selection mode
     if (selectionMode) {
-      // If not selected, select it first
-      if (!isSelected) {
+      // If already selected, start dragging
+      if (isSelected) {
+        startDragging(e);
+      } else {
+        // Otherwise, select this router
         onClick(id);
-        return;
       }
-      
-      // Begin dragging only if already selected
-      e.stopPropagation();
-      setIsDragging(true);
-      
-      // Update plane to be at router's height
-      plane.current.constant = -position[1];
-      
-      // Set cursor style
-      gl.domElement.style.cursor = 'grabbing';
-      gl.domElement.setPointerCapture(e.pointerId);
-      
-      // Set up the move and up event handlers
-      const handleMove = (moveEvent) => {
-        if (!isDragging) return;
-        
-        // Update raycaster with current mouse position
-        raycaster.setFromCamera(mouse, camera);
-        
-        // Find intersection with the plane
-        const intersection = new THREE.Vector3();
-        if (raycaster.ray.intersectPlane(plane.current, intersection)) {
-          // Call drag handler with new position
-          onDrag(id, intersection.x, intersection.z);
-        }
-      };
-      
-      const handleUp = (upEvent) => {
-        setIsDragging(false);
-        gl.domElement.style.cursor = 'grab';
-        gl.domElement.releasePointerCapture(e.pointerId);
-        
-        // Clean up event listeners
-        gl.domElement.removeEventListener('pointermove', handleMove);
-        gl.domElement.removeEventListener('pointerup', handleUp);
-      };
-      
-      // Add event listeners
-      gl.domElement.addEventListener('pointermove', handleMove);
-      gl.domElement.addEventListener('pointerup', handleUp);
     } else {
       // Regular click in normal mode
       onClick(id);
     }
   };
+  
+  // Clean up event listeners when component unmounts
+  useEffect(() => {
+    return () => {
+      if (isDragging) {
+        gl.domElement.removeEventListener('pointermove', handleDrag);
+        gl.domElement.removeEventListener('pointerup', stopDragging);
+      }
+    };
+  }, [isDragging]);
   
   return (
     <group 
