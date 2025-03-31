@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const ControlPanel = ({
   onStartSimulation,
@@ -16,9 +16,16 @@ const ControlPanel = ({
   const isPaused = simulationStatus === 'paused';
   const isCompleted = simulationStatus === 'completed';
   
+  // State for collapsible sections
+  const [isInstructionsCollapsed, setIsInstructionsCollapsed] = useState(false);
+  
   const handleSpeedChange = (e) => {
     const newSpeed = parseFloat(e.target.value);
     onSpeedChange(newSpeed);
+  };
+  
+  const toggleInstructions = () => {
+    setIsInstructionsCollapsed(!isInstructionsCollapsed);
   };
   
   return (
@@ -83,14 +90,25 @@ const ControlPanel = ({
       </div>
       
       <div className="panel-section instructions">
-        <h4>Instructions</h4>
-        <ul className="instructions-list">
-          <li>Drag routers to position them in 3D space</li>
-          <li>Use camera controls to rotate and zoom the view</li>
-          <li>Click "Connect Routers" to add links</li>
-          <li>Use "Selection Mode" to delete elements</li>
-          <li>Start simulation to see routing in action</li>
-        </ul>
+        <div 
+          className={`collapsible-header ${isInstructionsCollapsed ? 'collapsed' : ''}`}
+          onClick={toggleInstructions}
+        >
+          <h4>Instructions</h4>
+          <span className="collapsible-icon">
+            {isInstructionsCollapsed ? '►' : '▼'}
+          </span>
+        </div>
+        
+        <div className={`collapsible-content ${isInstructionsCollapsed ? 'collapsed' : ''}`}>
+          <ul className="instructions-list">
+            <li>Drag routers to position them in 3D space</li>
+            <li>Use camera controls to rotate and zoom the view</li>
+            <li>Click "Connect Routers" to add links</li>
+            <li>Use "Selection Mode" to delete elements</li>
+            <li>Start simulation to see routing in action</li>
+          </ul>
+        </div>
       </div>
       
       {simulationStatus === 'idle' && disabled && (

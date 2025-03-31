@@ -254,34 +254,16 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   
   const renderSimulationLogs = () => {
     if (simulationLogs.length === 0) {
-      return <p className="no-logs">No logs available yet.</p>;
+      return null;
     }
     
-    // Get the last 3 logs or less
-    const latestLogs = simulationLogs.slice(-3);
-    
     return (
-      <div className="simulation-logs-compact">
-        <h4>Latest Logs</h4>
-        <ul className="logs-list-compact">
-          {latestLogs.map((log, index) => {
-            const isStepHeader = log.startsWith('---');
-            return (
-              <li 
-                key={index} 
-                className={`log-item ${isStepHeader ? 'step-header' : ''}`}
-              >
-                {log}
-              </li>
-            );
-          })}
-        </ul>
-        {simulationLogs.length > 3 && (
-          <div className="more-logs">
-            <button onClick={() => setShowLogs(true)}>View All Logs...</button>
-          </div>
-        )}
-      </div>
+      <button 
+        className="logs-compact-button"
+        onClick={() => setShowLogs(true)}
+      >
+        Show Logs
+      </button>
     );
   };
   

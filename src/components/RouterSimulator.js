@@ -34,6 +34,10 @@ const RouterSimulator = () => {
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
   
+  // Add new state for panel visibility
+  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
+  const [rightPanelVisible, setRightPanelVisible] = useState(true);
+  
   // Handle router dragging from the toolbox
   const handleRouterDrop = (e) => {
     if (simulationStatus === 'running') return;
@@ -864,6 +868,14 @@ const RouterSimulator = () => {
     setSelectedElements({routers: [], links: []});
   };
   
+  const toggleLeftPanel = () => {
+    setLeftPanelVisible(!leftPanelVisible);
+  };
+  
+  const toggleRightPanel = () => {
+    setRightPanelVisible(!rightPanelVisible);
+  };
+  
   return (
     <div className="router-simulator">
       <div className="simulator-wrapper">
@@ -933,7 +945,7 @@ const RouterSimulator = () => {
           </div>
           
           {/* Left panel with LSDB */}
-          <div className="left-panel">
+          <div className={`left-panel ${!leftPanelVisible ? 'collapsed' : ''}`}>
             <LSDBPanel 
               lsdbData={lsdbData}
               routingTables={routingTables}
@@ -944,8 +956,17 @@ const RouterSimulator = () => {
             />
           </div>
           
+          {/* Button to toggle left panel */}
+          <button 
+            className={`panel-toggle left-panel-toggle ${!leftPanelVisible ? 'collapsed' : ''}`}
+            onClick={toggleLeftPanel}
+            aria-label={leftPanelVisible ? 'Hide left panel' : 'Show left panel'}
+          >
+            {leftPanelVisible ? '◄' : '►'}
+          </button>
+          
           {/* Right panel with controls */}
-          <div className="right-panel">
+          <div className={`right-panel ${!rightPanelVisible ? 'collapsed' : ''}`}>
             <ControlPanel 
               onStartSimulation={handleStartSimulation}
               onPauseSimulation={handlePauseSimulation}
@@ -959,6 +980,15 @@ const RouterSimulator = () => {
               currentStep={currentStep}
             />
           </div>
+          
+          {/* Button to toggle right panel */}
+          <button 
+            className={`panel-toggle right-panel-toggle ${!rightPanelVisible ? 'collapsed' : ''}`}
+            onClick={toggleRightPanel}
+            aria-label={rightPanelVisible ? 'Hide right panel' : 'Show right panel'}
+          >
+            {rightPanelVisible ? '►' : '◄'}
+          </button>
         </div>
         
         {/* Link cost modal overlay */}
