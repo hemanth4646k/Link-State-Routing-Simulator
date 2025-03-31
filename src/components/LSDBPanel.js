@@ -92,7 +92,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     
     return (
       <div className="router-selector">
-        <label htmlFor="router-select">Select Router: </label>
+        <label htmlFor="router-select">Router: </label>
         <select
           id="router-select"
           value={selectedRouter}
@@ -155,13 +155,13 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     };
     
     return (
-      <>
+      <div className="lsdb-table-container">
         <h4>Link State Database for Router {selectedRouter}</h4>
         <table className="lsdb-table">
           <thead>
             <tr>
-              <th>Router ID</th>
-              <th>Adjacent Nodes (with costs)</th>
+              <th>Router</th>
+              <th>Adjacent Nodes</th>
             </tr>
           </thead>
           <tbody>
@@ -176,12 +176,8 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
                     adjacencies.map(adj => {
                       const cost = getEdgeCost(nodeId, adj);
                       return (
-                        <span key={adj}>
-                          {adj}
-                          {cost !== null && (
-                            <span className="cost-badge">cost: {cost}</span>
-                          )}
-                          {' '}
+                        <span key={adj} className="adjacency-entry">
+                          {adj}{cost !== null && `:${cost}`}
                         </span>
                       );
                     })
@@ -193,7 +189,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
             ))}
           </tbody>
         </table>
-      </>
+      </div>
     );
   };
   
@@ -224,17 +220,14 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     });
     
     return (
-      <>
+      <div className="routing-table-container">
         <h4>Routing Table for Router {selectedRouter}</h4>
-        <div className="routing-table-description">
-          <p>Shows the shortest path to each destination network.</p>
-        </div>
         <table className="routing-table">
           <thead>
             <tr>
-              <th>Destination</th>
-              <th>Next Hop</th>
-              <th>Total Cost</th>
+              <th>Dest.</th>
+              <th>Next</th>
+              <th>Cost</th>
             </tr>
           </thead>
           <tbody>
@@ -247,7 +240,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
             ))}
           </tbody>
         </table>
-      </>
+      </div>
     );
   };
   
@@ -260,43 +253,63 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   };
   
   const renderSimulationLogs = () => {
-    const getCurrentStep = () => {
-      if (simulationLogs.length === 0) return null;
-      
-      // Find the last step indicator
-      for (let i = simulationLogs.length - 1; i >= 0; i--) {
-        const log = simulationLogs[i];
-        if (log.includes('=== STEP ')) {
-          const match = log.match(/=== STEP (\d+) ===/);
-          if (match) return parseInt(match[1]);
-        } else if (log.includes('=== BEGIN HELLO PACKETS ===')) {
-          return 'Hello';
-        }
-      }
-      return null;
-    };
+    if (simulationLogs.length === 0) {
+      return <p className="no-logs">No logs available yet.</p>;
+    }
     
-    const currentStep = getCurrentStep();
+    // Get the last 3 logs or less
+    const latestLogs = simulationLogs.slice(-3);
     
     return (
-      <div className="simulation-logs">
-        <div className="logs-header" onClick={() => setShowLogs(!showLogs)}>
-          <h4>
-            <span className="toggle-icon">{showLogs ? '▼' : '▶'}</span> 
-            Simulation Logs 
-            {currentStep && <span className="current-step-indicator">(Current: {currentStep === 'Hello' ? 'Hello Packets' : `Step ${currentStep}`})</span>}
-          </h4>
-        </div>
+      <div className="simulation-logs-compact">
+        <h4>Latest Logs</h4>
+        <ul className="logs-list-compact">
+          {latestLogs.map((log, index) => {
+            const isStepHeader = log.startsWith('---');
+            return (
+              <li 
+                key={index} 
+                className={`log-item ${isStepHeader ? 'step-header' : ''}`}
+              >
+                {log}
+              </li>
+            );
+          })}
+        </ul>
+        {simulationLogs.length > 3 && (
+          <div className="more-logs">
+            <button onClick={() => setShowLogs(true)}>View All Logs...</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  return (
+    <div className="lsdb-panel">
+      <div className="database-section">
+        {renderViewModeSelector()}
+        {renderRouterSelector()}
+        {renderContent()}
+      </div>
+      
+      <div className="logs-container">
+        {/* Show only 3 latest logs by default */}
+        {!showLogs && renderSimulationLogs()}
         
+        {/* Show the full logs view when expanded */}
         {showLogs && (
-          <div className="logs-content" ref={logsContentRef}>
-            {simulationLogs.length === 0 ? (
-              <p className="no-logs">No logs available yet.</p>
-            ) : (
+          <div className="full-logs">
+            <div className="logs-header">
+              <h4>Simulation Logs</h4>
+              <button onClick={() => setShowLogs(false)} className="close-logs">
+                Close
+              </button>
+            </div>
+            <div className="logs-content" ref={logsContentRef}>
               <ul className="logs-list">
                 {simulationLogs.map((log, index) => {
-                  const isStepHeader = log.startsWith('===');
-                  
+                  const isStepHeader = log.startsWith('---');
                   return (
                     <li 
                       key={index} 
@@ -307,50 +320,10 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
                   );
                 })}
               </ul>
-            )}
+            </div>
           </div>
         )}
       </div>
-    );
-  };
-  
-  const renderPanelContent = () => {
-    return (
-      <div className="panel-content">
-        <h3>{
-          simulationStatus === 'completed' 
-            ? "Simulation Completed" 
-            : simulationStatus === 'running'
-              ? "Simulation Running"
-              : "Router Information"
-        }</h3>
-        
-        {renderViewModeSelector()}
-        
-        {renderRouterSelector()}
-        
-        <div className="table-container">
-          {renderContent()}
-        </div>
-        
-        <div className="logs-toggle">
-          <button onClick={() => setShowLogs(!showLogs)}>
-            {showLogs ? 'Hide Simulation Logs' : 'Show Simulation Logs'}
-          </button>
-        </div>
-        
-        {showLogs && (
-          <div className="logs-content" ref={logsContentRef}>
-            {renderSimulationLogs()}
-          </div>
-        )}
-      </div>
-    );
-  };
-  
-  return (
-    <div className="left-panel-content">
-      {renderPanelContent()}
     </div>
   );
 };

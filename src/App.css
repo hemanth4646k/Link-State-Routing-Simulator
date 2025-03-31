@@ -1,742 +1,393 @@
+/* App layout */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+}
+
 .App {
-  text-align: center;
+  height: 100vh;
+  width: 100vw;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  height: auto;
-  overflow-y: auto;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 1vmin);
-  color: white;
-  padding: 1rem;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 main {
-  flex: 1;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+/* Router Simulator Layout */
+.router-simulator {
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  position: relative;
+}
+
+.simulator-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
 .simulator-container {
-  display: flex;
-  flex: 1;
-  height: auto;
-  min-height: 600px;
-}
-
-.left-panel {
-  width: 250px;
-  background-color: #f5f5f5;
-  border-right: 1px solid #ccc;
-  overflow-y: auto;
-  padding: 1rem;
-}
-
-.right-panel {
-  width: 250px;
-  background-color: #f5f5f5;
-  border-left: 1px solid #ccc;
-  overflow-y: auto;
-  padding: 1rem;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .simulator-stage {
-  flex: 1;
-  position: relative;
-  background-color: #0a192f; /* Deep blue background for 3D scene */
-  overflow: hidden;
-  height: 600px;
-  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  touch-action: none; /* Prevent browser handling of gestures */
-  user-select: none; /* Prevent text selection */
-}
-
-.simulator-stage canvas {
-  width: 100% !important;
-  height: 100% !important;
-  outline: none;
-  cursor: grab;
-  touch-action: none; /* Critical for touch devices to handle 3D dragging properly */
-}
-
-.simulator-stage canvas:active {
-  cursor: grabbing;
-}
-
-/* Add glow effect for 3D labels to improve visibility */
-.simulator-stage [data-html] {
-  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.4));
-  pointer-events: none; /* Ensure labels don't block interactions */
-}
-
-.simulator-stage.selection-mode-active {
-  border: 2px dashed #e91e63;
-  box-shadow: inset 0 0 20px rgba(233, 30, 99, 0.3);
-}
-
-.simulator-stage.selection-mode-active canvas {
-  cursor: pointer;
-}
-
-/* Styles for selected routers in 3D view */
-.router-selected {
-  cursor: move !important;
-  touch-action: none !important;
-}
-
-/* Style for the 3D scene to encourage proper interaction */
-.simulator-stage::after {
-  content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  pointer-events: none;
-  z-index: 10;
-  border-radius: 4px;
-  box-shadow: inset 0 0 50px rgba(76, 201, 240, 0.1);
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  background-color: #f9f9f9;
+  z-index: 1;
 }
 
-.simulator-stage:hover::after {
-  opacity: 1;
+.simulator-stage.selection-mode-active {
+  border: 2px dashed #ff6b6b;
 }
 
-/* Style for draggable routers in selection mode */
-.selection-mode-active .router-draggable {
-  cursor: move;
-  touch-action: none;
-}
-
-/* Make the selection mode more obvious */
-.selection-mode-active canvas {
-  box-shadow: 0 0 15px rgba(76, 201, 240, 0.5) inset;
-}
-
-.toolbox {
-  padding: 10px;
-  background-color: #ececec;
-  border-bottom: 1px solid #ccc;
-}
-
-.router-node {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background-color: #3498db;
-  color: white;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Panels must come above stage but below toolbox */
+.left-panel {
   position: absolute;
-  user-select: none;
+  top: 70px;
+  left: 10px;
+  width: 300px;
+  bottom: 10px;
+  z-index: 5;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
-  z-index: 10;
-  touch-action: none; /* Prevent browser handling of drag gestures */
+  overflow: auto;
 }
 
-/* Only apply grab styles when not in connect mode */
-.router-node:not(.disabled):active {
-  transform: scale(1.08);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-  transition: none; /* Remove transition for immediate feedback */
+.right-panel {
+  position: absolute;
+  top: 70px;
+  right: 10px;
+  width: 320px;
+  bottom: 10px;
+  z-index: 5;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  overflow: auto;
 }
 
-.router-node:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-}
-
-.router-node.selected {
-  background-color: #e74c3c;
-  box-shadow: 0 0 0 4px rgba(231, 76, 60, 0.5);
-  transform: scale(1.05);
-  z-index: 20;
-}
-
-.router-node.disabled {
-  opacity: 0.7;
-  cursor: not-allowed !important; /* Force not-allowed cursor for disabled state */
-  pointer-events: none;
-}
-
-.router-link-container {
+/* Toolbox must come above everything */
+.toolbox {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 5;
-}
-
-.router-link-line {
-  stroke-linecap: round;
-}
-
-.link-cost {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  font-weight: bold;
-}
-
-.link-cost.selected {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
-
-.delete-button {
-  background-color: #e74c3c !important;
-  color: white !important;
-  font-weight: bold !important;
-  border: 2px solid #c0392b !important;
-  animation: pulse-delete 1.5s infinite;
-  position: relative;
-}
-
-.delete-button:before {
-  content: "🗑️";
-  margin-right: 5px;
-}
-
-.delete-button:hover {
-  background-color: #c0392b !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.delete-button:disabled {
-  background-color: #e57373 !important;
-  opacity: 0.6;
-  animation: none;
-  transform: none;
-  box-shadow: none;
-}
-
-@keyframes pulse-delete {
-  0% {
-    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(231, 76, 60, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
-  }
-}
-
-.toolbox button.active {
-  background-color: #27ae60;
-  color: white;
-}
-
-/* Updated RouterLink styles */
-.router-link {
-  position: absolute;
-  height: 3px;
-  background-color: #666;
-  transform-origin: left center;
-  z-index: 5;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.router-link.selected {
-  background-color: #ff4500;
-  height: 4px;
-}
-
-.router-link-cost {
-  position: absolute;
-  background-color: white;
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  padding: 2px 8px;
-  font-size: 12px;
-  z-index: 6;
-  user-select: none;
-  cursor: pointer;
-  text-align: center;
-  min-width: 20px;
-}
-
-.router-link-cost.selected {
-  background-color: #fff3cd;
-  border: 2px solid #ff4500;
-}
-
-/* Make links more visible on mobile */
-@media (max-width: 768px) {
-  .router-link {
-    height: 4px;
-  }
-  
-  .router-link.selected {
-    height: 5px;
-  }
-  
-  .router-link-cost {
-    font-size: 14px;
-    padding: 3px 8px;
-    font-weight: bold;
-  }
-}
-
-/* Fix for touch interactions */
-.router-link, .router-link-cost, .router-node {
-  -webkit-tap-highlight-color: transparent;
-}
-
-.packet {
+  right: 0;
+  height: 60px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #ddd;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  text-align: center;
-  color: white;
-  z-index: 30;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  user-select: none;
-  pointer-events: none;
-  transform: translate3d(0, 0, 0); /* Force hardware acceleration */
-  will-change: left, top; /* Optimize for animation */
+  padding: 0 15px;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.packet.lsp {
-  background-color: #3498db;
-  background-image: linear-gradient(135deg, #3498db, #2980b9);
-}
-
-.packet.hello {
-  background-color: #2ecc71;
-  background-image: linear-gradient(135deg, #2ecc71, #27ae60);
-}
-
-/* Flashing animation for LSDB updates */
-@keyframes highlight {
-  0% { background-color: #fff3cd; }
-  100% { background-color: transparent; }
-}
-
-.highlight-change {
-  animation: highlight 0.5s ease-out;
-}
-
-.control-panel {
-  padding: 10px;
-  background-color: #f0f0f0;
-  border-top: 1px solid #ccc;
+.toolbox-title {
+  flex: 1;
   display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.control-panel button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  background-color: #4CAF50;
-  color: white;
-  cursor: pointer;
-}
-
-.control-panel button:hover {
-  background-color: #45a049;
-}
-
-.control-panel button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.speed-control {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  margin: 15px 0;
-  width: 100%;
 }
 
-.speed-control label {
-  font-weight: bold;
-  margin-bottom: 5px;
+.toolbox-title h1 {
+  margin: 0;
+  font-size: 1.4rem;
   color: #333;
 }
 
-.speed-control input[type="range"] {
-  width: 100%;
-  height: 8px;
-  -webkit-appearance: none;
-  background: #ddd;
-  outline: none;
-  border-radius: 4px;
-  margin: 8px 0;
-}
-
-.speed-control input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #4CAF50;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.speed-control input[type="range"]::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #4CAF50;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.speed-control input[type="range"]::-webkit-slider-thumb:hover {
-  background: #45a049;
-  transform: scale(1.1);
-}
-
-.speed-control span {
+.simulation-status-badge {
+  padding: 5px 10px;
+  margin-left: 15px;
+  border-radius: 15px;
+  font-size: 0.8rem;
   font-weight: bold;
-  color: #4CAF50;
-  min-width: 36px;
-  text-align: center;
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.status-running {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-paused {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-completed {
+  background-color: #cce5ff;
+  color: #004085;
+}
+
+.toolbox-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.router-template {
+  padding: 8px 15px;
+  background-color: #007bff;
+  color: white;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  font-weight: 500;
+}
+
+/* Control Panel styles */
+.control-panel-container {
+  padding: 15px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.panel-section {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.simulation-controls h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.button-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.primary-button {
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.primary-button:hover {
+  background-color: #3367d6;
+}
+
+.primary-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.control-button {
+  background-color: #f8f9fa;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.control-button:hover {
+  background-color: #f1f3f4;
+}
+
+.reset-button {
+  background-color: #fbbc05;
+  color: #3c4043;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  background-color: #f9a825;
+}
+
+.speed-controls label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.speed-slider-container {
+  display: flex;
+  flex-direction: column;
 }
 
 .speed-labels {
   display: flex;
   justify-content: space-between;
-  width: 100%;
-  font-size: 12px;
+  margin-bottom: 5px;
+  font-size: 0.8rem;
   color: #666;
 }
 
-.speed-labels span:first-child {
-  text-align: left;
+input[type="range"] {
+  width: 100%;
+  margin: 5px 0;
 }
 
-.speed-labels span:last-child {
-  text-align: right;
+.speed-value {
+  text-align: center;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.instructions-list {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.instructions-list li {
+  margin-bottom: 8px;
+}
+
+.panel-message {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.panel-message.success {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+/* LSDB Panel styles */
+.lsdb-panel {
+  height: 100%;
+  overflow-y: auto;
+  padding: 15px;
+}
+
+.router-selector {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.router-selector label {
+  margin-right: 10px;
+  font-weight: 500;
+}
+
+.router-selector select {
+  flex: 1;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.view-mode-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.view-mode-selector button {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.view-mode-selector button.active {
+  background-color: #4285f4;
+  color: white;
+  border-color: #4285f4;
+}
+
+.lsdb-table-container, .routing-table-container {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .lsdb-table, .routing-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 1rem;
-  font-size: 14px;
-}
-
-.lsdb-table th, .lsdb-table td,
-.routing-table th, .routing-table td {
-  border: 1px solid #ddd;
-  padding: 6px;
-  text-align: left;
+  margin-top: 10px;
 }
 
 .lsdb-table th, .routing-table th {
-  background-color: #f2f2f2;
+  text-align: left;
+  padding: 8px;
+  background-color: #f1f3f4;
+  font-weight: 500;
 }
 
-.lsdb-table tr:nth-child(even),
-.routing-table tr:nth-child(even) {
-  background-color: #f9f9f9;
+.lsdb-table td, .routing-table td {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
 }
 
-.current-step {
-  margin: 10px 0 15px;
-  padding: 15px;
-  background-color: #e8f5e9;
-  border-radius: 4px;
-  border-left: 4px solid #4CAF50;
-  text-align: center;
-}
-
-.current-step h4 {
-  margin: 0 0 10px;
-  font-size: 14px;
-  color: #2e7d32;
-}
-
-.step-indicator {
-  font-weight: bold;
-  font-size: 18px;
-  color: #1b5e20;
-  padding: 5px 0;
-}
-
-/* Reset for simulation */
-.simulator-wrapper button {
-  margin: 5px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  background-color: #4CAF50;
-  color: white;
-  font-weight: normal;
-}
-
-.simulator-wrapper button:hover {
-  background-color: #45a049;
-}
-
-.simulator-wrapper button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.lsdb-table .cost-badge {
+.adjacency-entry {
   display: inline-block;
-  background-color: #f0f4f7;
-  border-radius: 12px;
-  padding: 1px 6px;
-  margin: 0 2px;
-  font-size: 11px;
-  color: #333;
-  border: 1px solid #ccc;
+  margin-right: 8px;
+  background-color: #f1f3f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-bottom: 4px;
 }
 
-.highlight-change .cost-badge {
-  background-color: #fff3cd;
-  border-color: #ffeeba;
+.logs-container {
+  position: relative;
 }
 
-.control-panel-container {
-  padding: 15px;
-  background-color: #f0f0f0;
-  border-radius: 5px;
+.logs-header {
   display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
-.control-panel-container button {
-  padding: 10px 15px;
-  border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.control-panel-container button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.control-panel-container button[disabled] {
-  background-color: #cccccc;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.control-panel-container button:nth-of-type(1) {
-  background-color: #4CAF50;
-  color: white;
-}
-
-.control-panel-container button:nth-of-type(2) {
-  background-color: #2196F3;
-  color: white;
-}
-
-/* Reset button specific styling */
-.reset-button {
-  background-color: #ff9800 !important;
-  color: white;
-}
-
-.help-text {
-  margin: 15px 0;
-  padding: 12px;
-  background-color: #fff3cd;
-  border-radius: 5px;
-  border-left: 4px solid #ffc107;
-  font-size: 14px;
-}
-
-.help-text p {
-  margin: 5px 0;
-  color: #856404;
-}
-
-.help-text p:last-child {
-  font-weight: bold;
-}
-
-/* Panel content styles */
-.panel-content {
-  margin-top: 15px;
-  min-height: 150px;
-  background: white;
+.logs-content {
+  background-color: #f8f9fa;
   border-radius: 4px;
   padding: 10px;
-  border: 1px solid #ddd;
-}
-
-/* Router selector styles */
-.router-selector {
-  margin: 15px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.router-selector select {
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-/* View mode selector */
-.view-mode-selector {
-  display: flex;
-  gap: 5px;
-  margin-top: 10px;
-}
-
-.view-mode-selector button {
-  flex: 1;
-  padding: 8px;
-  border-radius: 4px 4px 0 0;
-  border: 1px solid #ccc;
-  border-bottom: none;
-  background: #f5f5f5;
-  cursor: pointer;
-}
-
-.view-mode-selector button.active {
-  background: #4CAF50;
-  color: white;
-}
-
-.view-mode-selector button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Routing Table Styles */
-.routing-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-  font-size: 14px;
-}
-
-.routing-table th,
-.routing-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-}
-
-.routing-table th {
-  background-color: #f2f2f2;
-  font-weight: bold;
-}
-
-.routing-table tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.routing-table tr:hover {
-  background-color: #f0f0f0;
-}
-
-.routing-table tr.self-entry {
-  background-color: #e6f7ff;
-  font-weight: bold;
-}
-
-.routing-table-description {
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: #666;
-  font-style: italic;
-}
-
-/* Highlight effect for LSDB updates */
-@keyframes highlight {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(255, 255, 0, 0.3); }
-  100% { background-color: transparent; }
-}
-
-.highlight-change {
-  animation: highlight 0.5s ease;
-}
-
-/* Simulation logs styling */
-.logs-content {
-  max-height: 300px;
+  max-height: 200px;
   overflow-y: auto;
-  background: #f9f9f9;
-  border: 1px solid #eee;
-  border-radius: 0 0 4px 4px;
-  padding: 0;
-  margin: 0;
 }
 
 .logs-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  font-family: monospace;
 }
 
 .log-item {
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: 5px 0;
+  font-size: 0.9rem;
   border-bottom: 1px solid #eee;
-  color: #555;
-  white-space: pre-wrap;
-  line-height: 1.4;
-}
-
-.log-item:hover {
-  background-color: #f5f5f5;
 }
 
 .log-item:last-child {
@@ -748,290 +399,154 @@ main {
   color: #2e7d32;
   font-weight: bold;
   text-align: center;
-  padding: 10px 15px;
-  margin-top: 5px;
-  border-top: 1px solid #c8e6c9;
-  border-bottom: 1px solid #c8e6c9;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.current-step-indicator {
-  margin-left: 10px;
-  font-size: 12px;
-  background-color: #4CAF50;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: normal;
-}
-
-.no-logs {
-  padding: 15px;
-  text-align: center;
-  color: #888;
-  font-style: italic;
-}
-
-/* Responsive styles */
-@media (max-width: 1200px) {
-  .simulator-container {
-    flex-direction: column;
-    height: auto;
-    padding-bottom: 20px;
-  }
-  
-  .left-panel, .right-panel {
-    width: 100%;
-    border: none;
-    border-top: 1px solid #ccc;
-    max-height: none;
-    height: auto;
-    overflow-y: visible;
-    padding-bottom: 20px;
-  }
-  
-  .simulator-stage {
-    height: 500px;
-    min-height: 400px;
-    overflow: visible;
-  }
-}
-
-@media (max-width: 992px) {
-  .simulator-stage {
-    height: 500px;
-  }
-}
-
-@media (max-width: 768px) {
-  .toolbox {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  
-  .toolbox button {
-    flex: 1 0 auto;
-    min-width: 120px;
-    margin: 5px;
-  }
-  
-  .router-template {
-    margin-bottom: 5px;
-    width: 100%;
-    text-align: center;
-  }
-  
-  .simulator-container {
-    min-height: auto;
-    padding-bottom: 30px;
-  }
-  
-  body {
-    padding-bottom: 50px;
-  }
-  
-  html, body, #root {
-    height: auto;
-    min-height: 100vh;
-  }
-  
-  .control-panel {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .control-panel button {
-    width: 100%;
-    margin: 5px 0;
-  }
-  
-  .simulator-stage {
-    height: 400px;
-  }
-}
-
-@media (max-width: 480px) {
-  .App-header {
-    padding: 0.5rem;
-    font-size: calc(8px + 1vmin);
-  }
-  
-  .left-panel, .right-panel {
-    padding: 0.5rem;
-    max-height: none;
-    height: auto;
-    overflow-y: visible;
-    padding-bottom: 30px;
-  }
-  
-  .simulator-stage {
-    height: 350px;
-    overflow: visible;
-  }
-  
-  .view-mode-selector button {
-    padding: 6px;
-    font-size: 12px;
-  }
-  
-  .logs-content {
-    max-height: 250px; /* More space on mobile */
-  }
-  
-  .log-item {
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-  
-  .lsdb-table, .routing-table {
-    font-size: 12px;
-  }
-  
-  .lsdb-table th, .lsdb-table td,
-  .routing-table th, .routing-table td {
-    padding: 4px;
-  }
-}
-
-/* Router size responsive adjustment */
-@media (max-width: 600px) {
-  .router-node {
-    width: 60px;
-    height: 60px;
-    font-size: 14px;
-  }
-}
-
-/* Fix for overflow issues */
-html, body, #root, .App {
-  max-width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-/* Make tables responsive */
-.lsdb-table, .routing-table {
-  table-layout: fixed;
-  width: 100%;
-}
-
-.lsdb-table td, .routing-table td {
-  word-break: break-word;
-  overflow-wrap: break-word;
-}
-
-/* Adjust panel content for better spacing on mobile */
-.panel-content {
   padding: 8px;
+  margin-top: 5px;
 }
 
-/* Router template styling for better visibility */
-.router-template {
-  display: inline-block;
-  width: 150px;
-  height: 30px;
-  background-color: #4CAF50;
-  color: white;
-  border-radius: 4px;
-  padding: 6px 12px;
-  text-align: center;
-  cursor: grab;
-  user-select: none;
-  margin-right: 10px;
+.simulation-logs-compact {
+  margin-top: 15px;
 }
 
-@media (max-width: 768px) {
-  .router-template {
-    width: 100%;
-    margin-right: 0;
-    margin-bottom: 10px;
-  }
-}
-
-/* Control panel updates for responsiveness */
-.control-panel-container {
-  padding: 15px;
-  background-color: #f0f0f0;
-  border-radius: 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.control-panel-section {
-  margin-bottom: 5px;
-}
-
-.button-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.button-container button {
-  flex: 1 1 auto;
-  min-width: 100px;
-}
-
-.control-panel-container h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  font-size: 16px;
-  color: #333;
-}
-
-.control-panel-container h4 {
-  margin-top: 0;
-  margin-bottom: 5px;
-  font-size: 14px;
-  color: #444;
-}
-
-.instructions {
-  padding: 10px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
-  border-left: 3px solid #4CAF50;
-}
-
-.instructions-list {
+.logs-list-compact {
+  list-style: none;
+  padding: 0;
   margin: 0;
-  padding-left: 15px;
-  font-size: 13px;
-  color: #555;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 10px;
 }
 
-.instructions-list li {
-  margin-bottom: 5px;
+.more-logs {
+  text-align: center;
+  margin-top: 10px;
 }
 
-/* Make router dragging work better on touch devices */
+.more-logs button {
+  background: none;
+  border: none;
+  color: #4285f4;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.close-logs {
+  background: none;
+  border: none;
+  color: #4285f4;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Router Node styles */
 .router-node {
-  touch-action: none;
+  cursor: move;
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #007bff;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  user-select: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-@media (max-width: 768px) {
-  .button-container {
-    flex-direction: column;
+.router-node:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.router-node.selected {
+  background-color: #ff6b6b;
+  box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
   }
-  
-  .button-container button {
-    width: 100%;
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0.2), 0 4px 8px rgba(0, 0, 0, 0.3);
   }
-  
-  .instructions {
-    font-size: 12px;
-  }
-  
-  .instructions-list {
-    padding-left: 12px;
+  100% {
+    box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
   }
 }
 
-/* Modal styles */
+.link-cost {
+  position: absolute;
+  background-color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+}
+
+.packet {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #ffbb00;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 12px;
+  color: black;
+  font-weight: bold;
+  z-index: 3;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Highlight animation for LSDB updates */
+@keyframes highlight {
+  0% { background-color: #ffffff; }
+  50% { background-color: #ffff99; }
+  100% { background-color: #ffffff; }
+}
+
+.highlight-change {
+  animation: highlight 0.5s ease-in-out;
+}
+
+/* Button styles for toolbox */
+.toolbox button {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #f8f9fa;
+  transition: all 0.2s ease;
+}
+
+.toolbox button:hover {
+  background-color: #f1f3f4;
+}
+
+.toolbox button.active {
+  background-color: #4285f4;
+  color: white;
+  border-color: #4285f4;
+}
+
+.delete-button {
+  background-color: #ff6b6b !important;
+  color: white !important;
+  border-color: #ff5252 !important;
+}
+
+.delete-button:hover {
+  background-color: #ff5252 !important;
+}
+
+/* Modal for link cost */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -1042,294 +557,76 @@ html, body, #root, .App {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 20;
 }
 
 .modal-content {
   background-color: white;
   padding: 20px;
-  border-radius: 4px;
+  border-radius: 8px;
   width: 300px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  max-width: 90%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.form-group {
-  margin-bottom: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 5px;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 16px; /* Better for touch inputs */
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.modal-actions button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.modal-actions button[type="submit"] {
-  background-color: #4CAF50;
-  color: white;
-}
-
-.modal-actions button[type="button"] {
-  background-color: #f1f1f1;
-}
-
-@media (max-width: 480px) {
-  .modal-content {
-    padding: 15px;
-  }
-  
-  .modal-actions {
-    flex-direction: column;
-  }
-  
-  .modal-actions button {
-    width: 100%;
-    margin-bottom: 5px;
-    padding: 10px 16px; /* Larger touch target */
-  }
-  
-  .form-group input {
-    padding: 10px;
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .left-panel, .right-panel {
+    width: 280px;
   }
 }
 
-/* Style for simulation status section */
-.simulation-status {
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #e8f5e9;
-  border-radius: 4px;
-  border-left: 4px solid #4CAF50;
-  margin-bottom: 20px;
-}
-
-.simulation-status p {
-  margin: 5px 0;
-}
-
-.simulation-status strong {
-  color: #2e7d32;
-}
-
-.status-message {
-  font-style: italic;
-  color: #555;
-  font-size: 14px;
-}
-
-/* Redesign the current-step section for better visibility */
-.current-step {
-  margin: 10px 0 15px;
-  padding: 15px;
-  background-color: #e8f5e9;
-  border-radius: 4px;
-  border-left: 4px solid #4CAF50;
-  text-align: center;
-}
-
-.current-step h4 {
-  margin: 0 0 10px;
-  font-size: 14px;
-  color: #2e7d32;
-}
-
-.step-indicator {
-  font-weight: bold;
-  font-size: 18px;
-  color: #1b5e20;
-  padding: 5px 0;
-}
-
-/* Fix spacing on mobile */
-@media (max-width: 768px) {
-  .control-panel-container > div {
-    margin-bottom: 15px;
-  }
-  
-  .simulation-status {
-    padding: 10px;
-    margin-bottom: 25px;
-  }
-  
-  /* Ensure bottom padding for the page */
-  body {
-    padding-bottom: 70px;
-  }
-  
-  main {
-    margin-bottom: 30px;
-  }
-}
-
-/* Fix for the simulator wrapper element */
-.simulator-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: auto;
-  min-height: 600px;
-  overflow-y: visible;
-  padding-bottom: 30px;
-}
-
-@media (max-width: 768px) {
-  .simulator-wrapper {
-    padding-bottom: 50px;
-    min-height: auto;
-  }
-}
-
-@media (max-height: 800px) {
-  .simulator-stage {
-    height: 400px;
-  }
-}
-
-/* Fix for iOS Safari's 100vh issue */
-@supports (-webkit-touch-callout: none) {
-  .App {
-    height: -webkit-fill-available;
-  }
-  
-  body, html {
-    height: -webkit-fill-available;
-  }
-}
-
-/* Make scrolling smooth */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Enhance selection mode styling */
-.router-node.selected {
-  background-color: #e74c3c;
-  box-shadow: 0 0 0 4px rgba(231, 76, 60, 0.5);
-  transform: scale(1.05);
-  z-index: 20;
-}
-
-/* Make delete button more prominent */
-.delete-button {
-  background-color: #e74c3c !important;
-  color: white !important;
-  font-weight: bold !important;
-  border: 2px solid #c0392b !important;
-  animation: pulse-delete 1.5s infinite;
-  position: relative;
-}
-
-.delete-button:before {
-  content: "🗑️";
-  margin-right: 5px;
-}
-
-.delete-button:hover {
-  background-color: #c0392b !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.delete-button:disabled {
-  background-color: #e57373 !important;
-  opacity: 0.6;
-  animation: none;
-  transform: none;
-  box-shadow: none;
-}
-
-@keyframes pulse-delete {
-  0% {
-    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(231, 76, 60, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
-  }
-}
-
-/* Enhance help text styles */
-.help-text {
-  margin: 15px 0;
-  padding: 12px;
-  background-color: #fff3cd;
-  border-radius: 5px;
-  border-left: 4px solid #ffc107;
-  font-size: 14px;
-}
-
-.help-text p {
-  margin: 5px 0;
-  color: #856404;
-}
-
-.help-text p:last-child {
-  font-weight: bold;
-}
-
-/* Button to toggle selection mode */
-button.active {
-  background-color: #2196F3 !important; 
-  color: white !important;
-  font-weight: bold !important;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-/* Styles for active selection mode */
-.selection-mode-active .simulator-stage {
-  background-color: #f8f9fa;
-  border: 2px dashed #6c757d;
-}
-
-/* Ensure active logs stand out more on mobile */
-@media (max-width: 768px) {
-  .log-item.active-log {
-    border-left-width: 6px;
-  }
-  
-  .logs-content {
-    max-height: 250px; /* More space on mobile */
-  }
-}
-
-/* Responsive adjustments for the simulator stage */
 @media (max-width: 992px) {
-  .simulator-stage {
-    height: 500px;
+  .left-panel, .right-panel {
+    width: 240px;
   }
 }
 
-@media (max-width: 768px) or (max-height: 800px) {
-  .simulator-stage {
-    height: 400px;
+@media (max-width: 768px) {
+  .toolbox {
+    height: auto;
+    flex-direction: column;
+    padding: 10px;
+  }
+  
+  .toolbox-title {
+    margin-bottom: 10px;
+  }
+  
+  .toolbox-actions {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .left-panel, .right-panel {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 300px;
+    border-radius: 8px 8px 0 0;
+    z-index: 15;
+  }
+  
+  .left-panel {
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .right-panel {
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .left-panel.active, .right-panel.active {
+    transform: translateY(0);
   }
 }
 
-/* Make sure we don't cut off the 3D scene */
-.simulator-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: auto;
-  min-height: 600px;
+/* 3D Scene Styling */
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }

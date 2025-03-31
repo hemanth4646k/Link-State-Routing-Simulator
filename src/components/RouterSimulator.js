@@ -865,110 +865,114 @@ const RouterSimulator = () => {
   };
   
   return (
-    <div className="simulator-wrapper">
-      <div className="toolbox">
-        <div
-          className="router-template"
-          draggable
-          onDragEnd={handleRouterDrop}
-        >
-          Drag to add Router
+    <div className="router-simulator">
+      <div className="simulator-wrapper">
+        {/* Toolbox */}
+        <div className="toolbox">
+          <div className="toolbox-title">
+            <h1>Link State Routing Simulator</h1>
+            <div className={`simulation-status-badge status-${simulationStatus}`}>
+              {simulationStatus.charAt(0).toUpperCase() + simulationStatus.slice(1)}
+            </div>
+          </div>
+          <div className="toolbox-actions">
+            <div
+              className="router-template"
+              draggable
+              onDragEnd={handleRouterDrop}
+            >
+              Drag to add Router
+            </div>
+            <button 
+              onClick={toggleConnectMode}
+              className={connectMode ? 'active' : ''}
+              disabled={simulationStatus === 'running' || selectionMode}
+            >
+              {connectMode ? 'Cancel Connect' : 'Connect Routers'}
+            </button>
+            <button 
+              onClick={toggleSelectionMode}
+              className={selectionMode ? 'active' : ''}
+              disabled={simulationStatus === 'running'}
+            >
+              {selectionMode ? 'Exit Selection Mode' : 'Selection Mode'}
+            </button>
+            {selectionMode && (
+              <button 
+                onClick={deleteSelectedElements}
+                className="delete-button"
+                disabled={simulationStatus === 'running' || 
+                         (selectedElements.routers.length === 0 && selectedElements.links.length === 0)}
+              >
+                Delete Selected
+              </button>
+            )}
+          </div>
         </div>
-        <button 
-          onClick={toggleConnectMode}
-          className={connectMode ? 'active' : ''}
-          disabled={simulationStatus === 'running' || selectionMode}
-        >
-          {connectMode ? 'Cancel Connect' : 'Connect Routers'}
-        </button>
-        <button 
-          onClick={toggleSelectionMode}
-          className={selectionMode ? 'active' : ''}
-          disabled={simulationStatus === 'running'}
-        >
-          {selectionMode ? 'Exit Selection Mode' : 'Selection Mode'}
-        </button>
-        {selectionMode && (
-          <button 
-            onClick={deleteSelectedElements}
-            className="delete-button"
-            disabled={simulationStatus === 'running' || 
-                     (selectedElements.routers.length === 0 && selectedElements.links.length === 0)}
+        
+        {/* Main simulator container with the stage and 3D scene */}
+        <div className="simulator-container">
+          <div 
+            className={`simulator-stage ${selectionMode ? 'selection-mode-active' : ''}`}
+            ref={stageRef}
           >
-            Delete Selected
-          </button>
+            <ThreeScene
+              routers={routers}
+              links={links}
+              packets={packets}
+              onRouterClick={handleRouterClick}
+              onRouterDrag={handleRouterDrag}
+              onLinkClick={handleLinkClick}
+              selectedRouters={selectedRouters}
+              selectedElements={selectedElements}
+              disabled={simulationStatus === 'running'}
+              connectMode={connectMode}
+              selectionMode={selectionMode}
+              simulationStatus={simulationStatus}
+            />
+          </div>
+          
+          {/* Left panel with LSDB */}
+          <div className="left-panel">
+            <LSDBPanel 
+              lsdbData={lsdbData}
+              routingTables={routingTables}
+              currentHighlight={currentHighlight}
+              simulationStatus={simulationStatus}
+              links={links}
+              simulationLogs={simulationLogs}
+            />
+          </div>
+          
+          {/* Right panel with controls */}
+          <div className="right-panel">
+            <ControlPanel 
+              onStartSimulation={handleStartSimulation}
+              onPauseSimulation={handlePauseSimulation}
+              onResumeSimulation={handleResumeSimulation}
+              onEndSimulation={handleEndSimulation}
+              onResetSimulation={handleResetSimulation}
+              onSpeedChange={handleSpeedChange}
+              simulationStatus={simulationStatus}
+              speed={animationSpeed}
+              disabled={routers.length < 2 || links.length === 0}
+              currentStep={currentStep}
+            />
+          </div>
+        </div>
+        
+        {/* Link cost modal overlay */}
+        {showLinkCostModal && (
+          <LinkCostModal 
+            onClose={() => {
+              setShowLinkCostModal(false);
+              setSelectedRouters([]);
+              setConnectMode(false);
+            }}
+            onAddLink={handleAddLink}
+          />
         )}
       </div>
-      
-      <div className="simulator-container">
-        <div className="left-panel">
-          <LSDBPanel 
-            lsdbData={lsdbData}
-            routingTables={routingTables}
-            currentHighlight={currentHighlight}
-            simulationStatus={simulationStatus}
-            links={links}
-            simulationLogs={simulationLogs}
-          />
-          
-          {selectionMode && (
-            <div className="help-text">
-              <p><strong>Selection Mode Active</strong></p>
-              <p>Click on routers or links to select them.</p>
-              <p>Selected routers can be repositioned.</p>
-              <p>Click "Delete Selected" to remove selected items.</p>
-              <p>Selected items: {selectedElements.routers.length + selectedElements.links.length}</p>
-            </div>
-          )}
-        </div>
-        
-        <div 
-          className={`simulator-stage ${selectionMode ? 'selection-mode-active' : ''}`}
-          ref={stageRef}
-        >
-          <ThreeScene
-            routers={routers}
-            links={links}
-            packets={packets}
-            onRouterClick={handleRouterClick}
-            onRouterDrag={handleRouterDrag}
-            onLinkClick={handleLinkClick}
-            selectedRouters={selectedRouters}
-            selectedElements={selectedElements}
-            disabled={simulationStatus === 'running'}
-            connectMode={connectMode}
-            selectionMode={selectionMode}
-            simulationStatus={simulationStatus}
-          />
-        </div>
-        
-        <div className="right-panel">
-          <ControlPanel
-            onStartSimulation={handleStartSimulation}
-            onPauseSimulation={handlePauseSimulation}
-            onResumeSimulation={handleResumeSimulation}
-            onEndSimulation={handleEndSimulation}
-            onResetSimulation={handleResetSimulation}
-            onSpeedChange={handleSpeedChange}
-            simulationStatus={simulationStatus}
-            speed={animationSpeed}
-            disabled={routers.length < 2 || links.length === 0}
-            currentStep={currentStep}
-          />
-        </div>
-      </div>
-      
-      {/* Link cost modal */}
-      {showLinkCostModal && (
-        <LinkCostModal
-          onAddLink={handleAddLink}
-          onCancel={() => {
-            setShowLinkCostModal(false);
-            setSelectedRouters([]);
-            setConnectMode(false);
-          }}
-        />
-      )}
     </div>
   );
 };
