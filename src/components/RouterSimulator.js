@@ -7,6 +7,7 @@ import LSPPacket from './LSPPacket';
 import ControlPanel from './ControlPanel';
 import LSDBPanel from './LSDBPanel';
 import LinkCostModal from './LinkCostModal';
+import ThreeScene from './ThreeScene';
 import { runSimulation } from '../utils/simulationUtils';
 
 // Register the MotionPath plugin
@@ -56,7 +57,11 @@ const RouterSimulator = () => {
   
   // Handle router dragging on the stage
   const handleRouterDrag = (id, x, y) => {
-    if (simulationStatus === 'running') return;
+    // Don't allow dragging during simulation
+    if (simulationStatus === 'running') return; 
+    
+    // In selection mode, only selected routers can be dragged
+    if (selectionMode && !selectedElements.routers.includes(id)) return;
     
     // Ensure we have a valid stage reference
     if (!stageRef.current) return;
@@ -66,29 +71,28 @@ const RouterSimulator = () => {
     const stageWidth = stageRect.width;
     const stageHeight = stageRect.height;
     
-    // Ensure router stays within stage boundaries
-    // Allow 80% of router to be outside bounds for better usability
-    const routerSize = 80;
-    const minX = -routerSize * 0.8;
-    const minY = -routerSize * 0.8;
-    const maxX = stageWidth - routerSize * 0.2;
-    const maxY = stageHeight - routerSize * 0.2;
+    // Bounds checking: allow some room around edges
+    const padding = 50;
+    const minX = -padding;
+    const minY = -padding;
+    const maxX = stageWidth + padding;
+    const maxY = stageHeight + padding;
     
     // Constrain coordinates to stage boundaries
     const boundedX = Math.max(minX, Math.min(maxX, x));
     const boundedY = Math.max(minY, Math.min(maxY, y));
     
-    // Update router position
-    setRouters(prev => 
-      prev.map(router => 
+    // Update router position in state
+    setRouters(prev => {
+      const updatedRouters = prev.map(router => 
         router.id === id 
           ? { ...router, x: boundedX, y: boundedY } 
           : router
-      )
-    );
-    
-    // If there are links connected to this router, they will automatically update
-    // since they reference the router positions directly
+      );
+      
+      console.log(`Router ${id} moved to (${boundedX}, ${boundedY})`);
+      return updatedRouters;
+    });
   };
   
   // Handle router click - used for creating links or selecting elements
@@ -356,15 +360,14 @@ const RouterSimulator = () => {
       return;
     }
     
-    // Calculate center points of routers
-    const fromX = fromRouter.x + 40; // Router center (80px width)
-    const fromY = fromRouter.y + 40; // Router center (80px height)
-    const toX = toRouter.x + 40;
-    const toY = toRouter.y + 40;
+    // Calculate center points of routers for the 3D scene
+    const fromX = fromRouter.x;
+    const fromY = fromRouter.y;
+    const toX = toRouter.x;
+    const toY = toRouter.y;
     
-    // Use fixed packet size for consistency
-    const packetSize = 45;
-    const halfPacketSize = packetSize / 2;
+    // Use fixed packet size for consistency in 3D space
+    const packetSize = 30;
     
     // Create packet with unique ID based on source, target and timestamp
     const timestamp = Date.now();
@@ -398,7 +401,7 @@ const RouterSimulator = () => {
       size: packetSize
     };
     
-    // Add to state
+    // Add packet to state
     setPackets(prev => [...prev, newPacket]);
     
     // Calculate distance between routers for adaptive timing
@@ -409,66 +412,68 @@ const RouterSimulator = () => {
     // Calculate appropriate animation duration based on distance
     // Cap between 0.3 seconds and 8 seconds (depending on speed)
     const minDuration = 0.3;
-    const maxDuration = 8 / animationSpeed;
+    const maxDuration = 5 / animationSpeed; // Reduced max duration for better experience
     
     // Calculate duration based on distance and animation speed
-    // This ensures that packets travel at a reasonable speed
-    const baseDuration = Math.min(maxDuration, Math.max(minDuration, animationDuration / 1000));
+    const distanceFactor = Math.min(1.0, distance / 500); // Normalize distance
+    const baseDuration = (minDuration + (maxDuration - minDuration) * distanceFactor) / animationSpeed;
     
-    // Calculate final duration - for very short distances, use minimum duration
-    const durationInSeconds = distance < 50 ? minDuration : baseDuration;
+    // Calculate final duration with a minimum for short distances
+    const durationInSeconds = Math.max(minDuration, baseDuration);
     
-    // Wait for DOM update - reduced from 50ms to 20ms for faster response
-    setTimeout(() => {
-      // Find packet element
-      const packetEl = document.getElementById(packetId);
-      if (!packetEl) {
-        // If packet element not found, still call the callback to maintain step progression
-        if (externalCallback) externalCallback();
-        return;
-      }
-      
-      // Animate directly to target with smoother easing
-      gsap.to(packetEl, {
-        left: `${toX - halfPacketSize}px`, // Adjust for packet size
-        top: `${toY - halfPacketSize}px`,  // Adjust for packet size
-        duration: durationInSeconds,
-        ease: "power1.inOut", // Linear with slight ease at ends
-        onComplete: () => {
-          // Remove packet immediately to prevent memory leaks
-          setPackets(prev => prev.filter(p => p.id !== packetId));
+    // Create a GSAP animation to update the packet position
+    gsap.to({}, {
+      duration: durationInSeconds,
+      ease: "power2.inOut", // Smoother animation
+      onUpdate: function() {
+        // Calculate current position based on progress
+        const progress = this.progress();
+        const currentX = fromX + (toX - fromX) * progress;
+        const currentY = fromY + (toY - fromY) * progress;
+        
+        // Update packet position in state
+        setPackets(prevPackets => 
+          prevPackets.map(p => 
+            p.id === packetId 
+              ? { ...p, x: currentX, y: currentY } 
+              : p
+          )
+        );
+      },
+      onComplete: () => {
+        // Remove packet when animation completes
+        setPackets(prev => prev.filter(p => p.id !== packetId));
+        
+        // Update LSDB based on packet type
+        if (packetType === 'lsp') {
+          // For LSP packets, update the LSDB with the link state information
+          let updateData;
           
-          // Update LSDB based on packet type
-          if (packetType === 'lsp') {
-            // For LSP packets, update the LSDB with the link state information
-            let updateData;
-            
-            if (Array.isArray(newPacket.data)) {
-              // If we already parsed the data correctly in the packet creation
-              updateData = newPacket.data;
-            } else if (Array.isArray(packetData)) {
-              // If the data was provided as an array directly from simulationUtils
-              updateData = packetData;
-            }
-            
-            if (updateData && updateData.length === 2) {
-              updateLSDB(toId, updateData);
-              highlightChange(toId, updateData);
-            }
-          } else if (packetType === 'hello') {
-            // For Hello packets, update the LSDB to note the neighbor connection
-            // When a router receives a Hello, it should record that router as a neighbor
-            updateHelloPacket(fromId, toId);
+          if (Array.isArray(newPacket.data)) {
+            // If we already parsed the data correctly in the packet creation
+            updateData = newPacket.data;
+          } else if (Array.isArray(packetData)) {
+            // If the data was provided as an array directly from simulationUtils
+            updateData = packetData;
           }
           
-          // Call external callback if provided to signal completion for step sequencing
-          if (externalCallback) {
-            // Call the callback immediately to avoid waiting
-            externalCallback();
+          if (updateData && updateData.length === 2) {
+            updateLSDB(toId, updateData);
+            highlightChange(toId, updateData);
           }
+        } else if (packetType === 'hello') {
+          // For Hello packets, update the LSDB to note the neighbor connection
+          // When a router receives a Hello, it should record that router as a neighbor
+          updateHelloPacket(fromId, toId);
         }
-      });
-    }, 20); // Reduced waiting time for DOM update from 50ms to 20ms
+        
+        // Call external callback if provided to signal completion for step sequencing
+        if (externalCallback) {
+          // Call the callback immediately to avoid waiting
+          externalCallback();
+        }
+      }
+    });
   };
   
   // Process a Hello packet from one router to another
@@ -909,8 +914,9 @@ const RouterSimulator = () => {
           {selectionMode && (
             <div className="help-text">
               <p><strong>Selection Mode Active</strong></p>
-              <p>Click on routers or links to select them for deletion.</p>
-              <p>Then click the "Delete Selected" button to remove them.</p>
+              <p>Click on routers or links to select them.</p>
+              <p>Selected routers can be repositioned.</p>
+              <p>Click "Delete Selected" to remove selected items.</p>
               <p>Selected items: {selectedElements.routers.length + selectedElements.links.length}</p>
             </div>
           )}
@@ -920,54 +926,20 @@ const RouterSimulator = () => {
           className={`simulator-stage ${selectionMode ? 'selection-mode-active' : ''}`}
           ref={stageRef}
         >
-          {/* Render router nodes */}
-          {routers.map(router => (
-            <RouterNode
-              key={router.id}
-              id={router.id}
-              x={router.x}
-              y={router.y}
-              onDrag={handleRouterDrag}
-              onClick={handleRouterClick}
-              isSelected={
-                connectMode 
-                  ? selectedRouters.includes(router.id)
-                  : selectionMode && selectedElements.routers.includes(router.id)
-              }
-              disabled={simulationStatus === 'running'}
-              connectMode={connectMode}
-            />
-          ))}
-          
-          {/* Render links between routers */}
-          {links.map(link => {
-            const source = routers.find(r => r.id === link.source);
-            const target = routers.find(r => r.id === link.target);
-            return (
-              <RouterLink
-                key={link.id}
-                id={link.id}
-                source={source}
-                target={target}
-                cost={link.cost}
-                onClick={handleLinkClick}
-                isSelected={selectionMode && selectedElements.links.includes(link.id)}
-              />
-            );
-          })}
-          
-          {/* Render animation packets */}
-          {packets.map(packet => (
-            <LSPPacket
-              key={packet.id}
-              id={packet.id}
-              x={packet.x}
-              y={packet.y}
-              data={packet.data}
-              type={packet.type}
-              size={packet.size}
-            />
-          ))}
+          <ThreeScene
+            routers={routers}
+            links={links}
+            packets={packets}
+            onRouterClick={handleRouterClick}
+            onRouterDrag={handleRouterDrag}
+            onLinkClick={handleLinkClick}
+            selectedRouters={selectedRouters}
+            selectedElements={selectedElements}
+            disabled={simulationStatus === 'running'}
+            connectMode={connectMode}
+            selectionMode={selectionMode}
+            simulationStatus={simulationStatus}
+          />
         </div>
         
         <div className="right-panel">

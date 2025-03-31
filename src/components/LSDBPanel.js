@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus, links, simulationLogs = [] }) => {
   const [selectedRouter, setSelectedRouter] = useState('');
-  const [viewMode, setViewMode] = useState('lsdb'); // 'lsdb' or 'routingTable'
+  const [viewMode, setViewMode] = useState('lsdb'); // Always default to LSDB view
   const [flashingRow, setFlashingRow] = useState(null);
   const [showLogs, setShowLogs] = useState(false);
   const logsContentRef = useRef(null);
@@ -46,26 +46,20 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     }
   }, [lsdbData, selectedRouter]);
   
-  // Effect to switch to routing table view when simulation completes
+  // No longer automatically switch to routing table view when simulation completes
   useEffect(() => {
     if (simulationStatus === 'completed') {
       console.log("Simulation completed, routing tables:", Object.keys(routingTables).length);
       
-      // Check if we have routing tables and switch to that view
-      if (Object.keys(routingTables).length > 0) {
-        console.log("Switching to routing table view");
-        setViewMode('routingTable');
-        
-        // Ensure a router is selected for the routing table view
-        if (selectedRouter === '' || !routingTables[selectedRouter]) {
-          const firstRouter = Object.keys(routingTables).sort()[0];
-          if (firstRouter) {
-            setSelectedRouter(firstRouter);
-          }
+      // Only ensure a router is selected if needed, but don't change viewMode
+      if (selectedRouter === '' || (!lsdbData[selectedRouter] && !routingTables[selectedRouter])) {
+        const availableRouters = Object.keys(viewMode === 'lsdb' ? lsdbData : routingTables).sort();
+        if (availableRouters.length > 0) {
+          setSelectedRouter(availableRouters[0]);
         }
       }
     }
-  }, [simulationStatus, routingTables, selectedRouter]);
+  }, [simulationStatus, routingTables, lsdbData, selectedRouter, viewMode]);
   
   // Effect to automatically expand logs when simulation is running
   useEffect(() => {
@@ -109,6 +103,26 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
             <option key={id} value={id}>Router {id}</option>
           ))}
         </select>
+      </div>
+    );
+  };
+  
+  const renderViewModeSelector = () => {
+    return (
+      <div className="view-mode-selector">
+        <button 
+          className={viewMode === 'lsdb' ? 'active' : ''}
+          onClick={() => setViewMode('lsdb')}
+        >
+          Link State Database
+        </button>
+        <button 
+          className={viewMode === 'routingTable' ? 'active' : ''}
+          onClick={() => setViewMode('routingTable')}
+          disabled={Object.keys(routingTables).length === 0}
+        >
+          Routing Table
+        </button>
       </div>
     );
   };
@@ -300,39 +314,43 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     );
   };
   
-  return (
-    <div className="lsdb-panel">
-      <h3>{
-        simulationStatus === 'running' ? 'Network Simulation in Progress' :
-        simulationStatus === 'completed' ? 'Simulation Complete' :
-        simulationStatus === 'paused' ? 'Simulation Paused' :
-        'Router Information'
-      }</h3>
-      
-      <div className="view-mode-selector">
-        <button
-          className={viewMode === 'lsdb' ? 'active' : ''}
-          onClick={() => setViewMode('lsdb')}
-          disabled={simulationStatus !== 'completed' && viewMode !== 'lsdb'}
-        >
-          Link State Database
-        </button>
-        <button
-          className={viewMode === 'routingTable' ? 'active' : ''}
-          onClick={() => setViewMode('routingTable')}
-          disabled={simulationStatus !== 'completed' || Object.keys(routingTables).length === 0}
-        >
-          Routing Table
-        </button>
-      </div>
-      
-      {renderRouterSelector()}
-      
+  const renderPanelContent = () => {
+    return (
       <div className="panel-content">
-        {renderContent()}
+        <h3>{
+          simulationStatus === 'completed' 
+            ? "Simulation Completed" 
+            : simulationStatus === 'running'
+              ? "Simulation Running"
+              : "Router Information"
+        }</h3>
+        
+        {renderViewModeSelector()}
+        
+        {renderRouterSelector()}
+        
+        <div className="table-container">
+          {renderContent()}
+        </div>
+        
+        <div className="logs-toggle">
+          <button onClick={() => setShowLogs(!showLogs)}>
+            {showLogs ? 'Hide Simulation Logs' : 'Show Simulation Logs'}
+          </button>
+        </div>
+        
+        {showLogs && (
+          <div className="logs-content" ref={logsContentRef}>
+            {renderSimulationLogs()}
+          </div>
+        )}
       </div>
-      
-      {simulationStatus !== 'idle' && renderSimulationLogs()}
+    );
+  };
+  
+  return (
+    <div className="left-panel-content">
+      {renderPanelContent()}
     </div>
   );
 };

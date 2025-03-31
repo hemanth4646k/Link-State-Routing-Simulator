@@ -53,7 +53,7 @@ main {
   display: flex;
   flex: 1;
   height: auto;
-  min-height: 500px;
+  min-height: 600px;
 }
 
 .left-panel {
@@ -75,8 +75,78 @@ main {
 .simulator-stage {
   flex: 1;
   position: relative;
-  background-color: #f9f9f9;
+  background-color: #0a192f; /* Deep blue background for 3D scene */
   overflow: hidden;
+  height: 600px;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  touch-action: none; /* Prevent browser handling of gestures */
+  user-select: none; /* Prevent text selection */
+}
+
+.simulator-stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
+  cursor: grab;
+  touch-action: none; /* Critical for touch devices to handle 3D dragging properly */
+}
+
+.simulator-stage canvas:active {
+  cursor: grabbing;
+}
+
+/* Add glow effect for 3D labels to improve visibility */
+.simulator-stage [data-html] {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.4));
+  pointer-events: none; /* Ensure labels don't block interactions */
+}
+
+.simulator-stage.selection-mode-active {
+  border: 2px dashed #e91e63;
+  box-shadow: inset 0 0 20px rgba(233, 30, 99, 0.3);
+}
+
+.simulator-stage.selection-mode-active canvas {
+  cursor: pointer;
+}
+
+/* Styles for selected routers in 3D view */
+.router-selected {
+  cursor: move !important;
+  touch-action: none !important;
+}
+
+/* Style for the 3D scene to encourage proper interaction */
+.simulator-stage::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 4px;
+  box-shadow: inset 0 0 50px rgba(76, 201, 240, 0.1);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.simulator-stage:hover::after {
+  opacity: 1;
+}
+
+/* Style for draggable routers in selection mode */
+.selection-mode-active .router-draggable {
+  cursor: move;
+  touch-action: none;
+}
+
+/* Make the selection mode more obvious */
+.selection-mode-active canvas {
+  box-shadow: 0 0 15px rgba(76, 201, 240, 0.5) inset;
 }
 
 .toolbox {
@@ -729,6 +799,12 @@ main {
   }
 }
 
+@media (max-width: 992px) {
+  .simulator-stage {
+    height: 500px;
+  }
+}
+
 @media (max-width: 768px) {
   .toolbox {
     display: flex;
@@ -770,6 +846,10 @@ main {
   .control-panel button {
     width: 100%;
     margin: 5px 0;
+  }
+  
+  .simulator-stage {
+    height: 400px;
   }
 }
 
@@ -1106,7 +1186,7 @@ html, body, #root, .App {
   display: flex;
   flex-direction: column;
   height: auto;
-  min-height: 500px;
+  min-height: 600px;
   overflow-y: visible;
   padding-bottom: 30px;
 }
@@ -1118,9 +1198,9 @@ html, body, #root, .App {
   }
 }
 
-@media (max-height: 700px) {
+@media (max-height: 800px) {
   .simulator-stage {
-    height: 350px;
+    height: 400px;
   }
 }
 
@@ -1231,4 +1311,25 @@ button.active {
   .logs-content {
     max-height: 250px; /* More space on mobile */
   }
+}
+
+/* Responsive adjustments for the simulator stage */
+@media (max-width: 992px) {
+  .simulator-stage {
+    height: 500px;
+  }
+}
+
+@media (max-width: 768px) or (max-height: 800px) {
+  .simulator-stage {
+    height: 400px;
+  }
+}
+
+/* Make sure we don't cut off the 3D scene */
+.simulator-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 600px;
 }
