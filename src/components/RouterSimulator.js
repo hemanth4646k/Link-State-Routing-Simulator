@@ -249,7 +249,10 @@ const RouterSimulator = () => {
       routers[0].id, 
       currentSpeed, 
       (animationData) => handleAnimationStep(animationData),
-      (logs) => setSimulationLogs(logs) // Handle logs from simulationUtils
+      (logs) => {
+        // We need to update the logs immediately to keep them in sync with animations
+        setSimulationLogs(logs);
+      }
     );
     
     // Set the GSAP timeline speed to match the selected animation speed

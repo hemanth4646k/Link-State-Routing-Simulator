@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus, links, simulationLogs = [] }) => {
   const [selectedRouter, setSelectedRouter] = useState('');
   const [viewMode, setViewMode] = useState('lsdb'); // 'lsdb' or 'routingTable'
   const [flashingRow, setFlashingRow] = useState(null);
   const [showLogs, setShowLogs] = useState(false);
+  const logsContentRef = useRef(null);
   
   // Helper to check if this entry should be highlighted
   const shouldHighlight = (routerId, nodeId) => {
@@ -28,10 +29,10 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
         timestamp: currentHighlight.timestamp || Date.now()
       });
       
-      // Clear the flashing after 800ms
+      // Clear the flashing after 500ms to match the updated timeouts elsewhere
       const timer = setTimeout(() => {
         setFlashingRow(null);
-      }, 800);
+      }, 500);
       
       return () => clearTimeout(timer);
     }
@@ -72,6 +73,14 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
       setShowLogs(true);
     }
   }, [simulationStatus]);
+  
+  // Effect to auto-scroll logs to the bottom when new logs are added
+  useEffect(() => {
+    if (showLogs && logsContentRef.current && simulationLogs.length > 0) {
+      // Scroll to the bottom of the logs to see the newest entries
+      logsContentRef.current.scrollTop = logsContentRef.current.scrollHeight;
+    }
+  }, [simulationLogs, showLogs]);
   
   const renderRouterSelector = () => {
     // Use lsdbData for dropdown when in LSDB view, otherwise use routingTables
@@ -175,22 +184,16 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   };
   
   const renderRoutingTable = () => {
-    console.log("Rendering routing table, available tables:", Object.keys(routingTables));
-    console.log("Selected router:", selectedRouter);
-    
     if (!selectedRouter) {
       return <p>Select a router to view its Routing Table.</p>;
     }
     
     if (!routingTables[selectedRouter]) {
-      console.log("No routing table for selected router:", selectedRouter);
       return <p>No routing table available for Router {selectedRouter}.</p>;
     }
     
     const routingTable = routingTables[selectedRouter];
     const entries = Object.values(routingTable);
-    
-    console.log("Routing table entries for router", selectedRouter, ":", entries);
     
     if (entries.length === 0) {
       return <p>No routing table entries for Router {selectedRouter}.</p>;
@@ -243,26 +246,52 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   };
   
   const renderSimulationLogs = () => {
+    const getCurrentStep = () => {
+      if (simulationLogs.length === 0) return null;
+      
+      // Find the last step indicator
+      for (let i = simulationLogs.length - 1; i >= 0; i--) {
+        const log = simulationLogs[i];
+        if (log.includes('=== STEP ')) {
+          const match = log.match(/=== STEP (\d+) ===/);
+          if (match) return parseInt(match[1]);
+        } else if (log.includes('=== BEGIN HELLO PACKETS ===')) {
+          return 'Hello';
+        }
+      }
+      return null;
+    };
+    
+    const currentStep = getCurrentStep();
+    
     return (
       <div className="simulation-logs">
         <div className="logs-header" onClick={() => setShowLogs(!showLogs)}>
           <h4>
             <span className="toggle-icon">{showLogs ? '▼' : '▶'}</span> 
-            Simulation Logs
+            Simulation Logs 
+            {currentStep && <span className="current-step-indicator">(Current: {currentStep === 'Hello' ? 'Hello Packets' : `Step ${currentStep}`})</span>}
           </h4>
         </div>
         
         {showLogs && (
-          <div className="logs-content">
+          <div className="logs-content" ref={logsContentRef}>
             {simulationLogs.length === 0 ? (
               <p className="no-logs">No logs available yet.</p>
             ) : (
               <ul className="logs-list">
-                {[...simulationLogs].reverse().map((log, index) => (
-                  <li key={index} className="log-item">
-                    {log}
-                  </li>
-                ))}
+                {simulationLogs.map((log, index) => {
+                  const isStepHeader = log.startsWith('===');
+                  
+                  return (
+                    <li 
+                      key={index} 
+                      className={`log-item ${isStepHeader ? 'step-header' : ''}`}
+                    >
+                      {log}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
