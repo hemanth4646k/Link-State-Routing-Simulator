@@ -53,7 +53,7 @@ const ControlPanel = ({
             </button>
           )}
           
-          {(isCompleted) && (
+          {isCompleted && (
             <button onClick={onResetSimulation} className="reset-button">
               Reset Simulation
             </button>
@@ -85,7 +85,8 @@ const ControlPanel = ({
       <div className="panel-section instructions">
         <h4>Instructions</h4>
         <ul className="instructions-list">
-          <li>Drag routers to position them</li>
+          <li>Drag routers to position them in 3D space</li>
+          <li>Use camera controls to rotate and zoom the view</li>
           <li>Click "Connect Routers" to add links</li>
           <li>Use "Selection Mode" to delete elements</li>
           <li>Start simulation to see routing in action</li>

@@ -41,20 +41,16 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
     // Update mouse coordinates for raycaster
     raycaster.setFromCamera(mouse, camera);
     
-    // Create a drag plane at the router's height, aligned with the view
+    // Create a drag plane perpendicular to the camera direction
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
-    // If looking from directly above, use horizontal plane
-    if (Math.abs(cameraDirection.y) > 0.9) {
-      dragPlane.current.normal.set(0, 1, 0);
-    } else {
-      // Otherwise create a plane more aligned with the view
-      dragPlane.current.normal.set(cameraDirection.x, 0, cameraDirection.z).normalize();
-    }
+    // Use a plane perpendicular to the camera view for more intuitive dragging
+    dragPlane.current.normal.copy(cameraDirection);
     
-    // Set the plane to pass through the router
-    dragPlane.current.constant = -position[1];
+    // Position the plane at the router's position
+    const routerPosition = new THREE.Vector3(...position);
+    dragPlane.current.constant = -routerPosition.dot(cameraDirection);
     
     // Find the intersection with the plane
     const intersection = new THREE.Vector3();
@@ -85,11 +81,8 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
       // Calculate new position by subtracting the offset
       const newPosition = new THREE.Vector3().copy(intersection).sub(dragOffset.current);
       
-      // Keep the y-coordinate consistent
-      newPosition.y = position[1];
-      
-      // Update position via parent component
-      onDrag(id, newPosition.x, newPosition.z);
+      // Update position via parent component with all coordinates
+      onDrag(id, newPosition.x, newPosition.y, newPosition.z);
     }
   };
   
@@ -471,7 +464,7 @@ const ThreeScene = ({
   };
   
   // Handle router drag
-  const handleRouterDrag = (id, x, z) => {
+  const handleRouterDrag = (id, x, y, z) => {
     if (onRouterDrag) {
       // Convert 3D coordinates back to 2D for the parent component
       const scale = 30;
@@ -479,6 +472,7 @@ const ThreeScene = ({
       const offsetY = 500;
       
       const x2D = x * scale + offsetX;
+      // Use z for the 2D y-coordinate since we're in a horizontal plane simulation
       const y2D = z * scale + offsetY;
       
       onRouterDrag(id, x2D, y2D);
