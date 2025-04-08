@@ -297,14 +297,21 @@ const Packet = ({ id, position, type, data }) => {
       return 'Hello';
     }
     
-    if (type === 'lsp' && Array.isArray(data) && data.length >= 1) {
-      // Format as LSP-X where X is the router ID
-      return `LSP-${data[0]}`;
-    } else if (typeof data === 'string' && data.includes('LSP')) {
-      // Try to extract router ID from strings like "LSPA: ["B","C"]"
-      const match = data.match(/LSP([A-Z])/);
-      if (match && match[1]) {
-        return `LSP-${match[1]}`;
+    if (type === 'lsp') {
+      // For the new format: "LSP-A-2" - return it exactly as is
+      if (typeof data === 'string' && data.match(/LSP-[A-Z]-\d+/)) {
+        return data; // Return the exact string
+      }
+      // For old array format: [routerId, adjList]
+      else if (Array.isArray(data) && data.length >= 1) {
+        return `LSP-${data[0]}`; // Format as LSP-X without sequence
+      }
+      // For old string format: "LSPA: ["B","C"]"
+      else if (typeof data === 'string' && data.includes('LSP')) {
+        const match = data.match(/LSP([A-Z])/);
+        if (match && match[1]) {
+          return `LSP-${match[1]}`; // Format as LSP-X without sequence
+        }
       }
     }
     

@@ -189,199 +189,41 @@ const prepareFormattedLogs = (logs) => {
  * @param {Function} onLogUpdate - Callback for log updates
  */
 export const runSimulation = (edges, startNode, speed, onStep, onLogUpdate) => {
-  // Extract all animation instructions from flooding algorithm
+  // Extract animation instructions from flooding algorithm's logs
   const { instructions, logs } = extractAnimationInstructions(edges, startNode);
   
-  // Prepare logs for display with step markers
+  // Prepare formatted logs for display
   const formattedLogs = prepareFormattedLogs(logs);
   
-  // We'll track which logs we've already displayed
+  // Group instructions by step number for sequential processing
+  const stepGroups = {};
+  instructions.forEach(inst => {
+    const step = inst.step;
+    if (!stepGroups[step]) {
+      stepGroups[step] = [];
+    }
+    stepGroups[step].push(inst);
+  });
+  
+  // Track logs displayed to the user (used to ensure order)
   const displayedLogs = [];
   
-  // Initially, only send the header to the component
-  if (onLogUpdate && formattedLogs.length > 0) {
-    // Start with just the simulation header
-    displayedLogs.push("=== LINK STATE ROUTING SIMULATION STARTING ===");
-    onLogUpdate(displayedLogs);
+  // This is a modified version that doesn't process any steps automatically
+  // We'll just display the starting simulation message and keep simulation running
+  
+  // Add simulation header
+  displayedLogs.push("=== LINK STATE ROUTING SIMULATION STARTED ===");
+  displayedLogs.push("=== Use Custom Packet button to send packets manually ===");
+  
+  if (onLogUpdate) {
+    onLogUpdate([...displayedLogs]);
   }
   
-  // Set up variables for animation timing
-  const stepInterval = 3000 / speed; // Time between major steps
-  const packetAnimationDuration = 1500 / speed; // Duration for packet animations
-  
-  // For very slow speeds, cap the maximum animation duration
-  const cappedAnimationDuration = Math.min(packetAnimationDuration, 8000); // Cap at 8 seconds
-  
-  // Group instructions by step
-  const stepGroups = instructions.reduce((acc, inst) => {
-    if (!acc[inst.step]) acc[inst.step] = [];
-    acc[inst.step].push(inst);
-    return acc;
-  }, {});
-  
-  // Fixed timing parameters (in milliseconds)
-  const fixedPacketTravelTime = 1200 / speed; // Travel time for packets
-  const fixedPacketInterval = 250 / speed; // Interval between packets from the same source-target
-
-  // List of active log indices for highlighting
-  let activeLogIndices = [];
-  
-  // Function to add a specific log to the displayed logs
-  const addLogToDisplay = (logIndex) => {
-    if (logIndex >= 0 && logIndex < formattedLogs.length && !displayedLogs.includes(formattedLogs[logIndex])) {
-      displayedLogs.push(formattedLogs[logIndex]);
-      if (onLogUpdate) {
-        onLogUpdate([...displayedLogs]);
-      }
-    }
-  };
-
-  // Add step header to displayed logs
-  const addStepHeaderToDisplay = (stepNumber) => {
-    const stepHeader = formattedLogs.find(log => log === `=== STEP ${stepNumber} ===` || 
-                                             (stepNumber === 0 && log === "=== BEGIN HELLO PACKETS ==="));
-    
-    if (stepHeader && !displayedLogs.includes(stepHeader)) {
-      displayedLogs.push(stepHeader);
-      if (onLogUpdate) {
-        onLogUpdate([...displayedLogs]);
-      }
-    }
-  };
-  
-  // Process steps sequentially using a recursive function to ensure steps don't overlap
-  const processStep = (stepIndex) => {
-    const stepNumbers = Object.keys(stepGroups).sort((a, b) => parseInt(a) - parseInt(b));
-    if (stepIndex >= stepNumbers.length) return; // All steps completed
-    
-    const currentStepNumber = parseInt(stepNumbers[stepIndex]);
-    const stepInstructions = stepGroups[currentStepNumber];
-    
-    // Add the step header to displayed logs
-    addStepHeaderToDisplay(currentStepNumber);
-    
-    // Within each step, organize packets and updates
-    const packetInstructions = [];
-    const updateInstructions = [];
-    
-    // Separate packet and update instructions
-    stepInstructions.forEach(inst => {
-      if (inst.type === 'packet') {
-        packetInstructions.push(inst);
-      } else if (inst.type === 'update') {
-        if (inst.step !== 1) { // Skip step 1 updates as they're handled by packets
-          updateInstructions.push(inst);
-        }
-      }
-    });
-    
-    // Show step label first
-    onStep({
-      type: 'step',
-      step: currentStepNumber
-    });
-    
-    // Group packets by source-target pair to avoid overlap on the same edge
-    const packetsByEdge = {};
-    packetInstructions.forEach(instruction => {
-      const edgeKey = `${instruction.from}-${instruction.to}`;
-      if (!packetsByEdge[edgeKey]) {
-        packetsByEdge[edgeKey] = [];
-      }
-      packetsByEdge[edgeKey].push(instruction);
-    });
-    
-    // Count animation completions to track when all animations for this step are done
-    let totalAnimations = packetInstructions.length;
-    let completedAnimations = 0;
-    
-    // Define a function to be called when each animation completes
-    const onAnimationComplete = (logIndex) => {
-      completedAnimations++;
-      
-      // If all packet animations are complete, process any updates and then move to the next step
-      if (completedAnimations === totalAnimations) {
-        if (updateInstructions.length > 0) {
-          // Process all update instructions
-          updateInstructions.forEach(instruction => {
-            // Add the update log to displayed logs first
-            if (instruction.logIndex !== undefined) {
-              addLogToDisplay(instruction.logIndex);
-            }
-            
-            // Then trigger the update animation
-            onStep({
-              ...instruction,
-              step: currentStepNumber
-            });
-          });
-        }
-        
-        // Check if this is the last step
-        if (stepIndex === stepNumbers.length - 1) {
-          // Add completion message to logs
-          displayedLogs.push("=== SIMULATION COMPLETED ===");
-          if (onLogUpdate) {
-            onLogUpdate([...displayedLogs]);
-          }
-          
-          // Signal completion with minimal delay
-          setTimeout(() => {
-            onStep({ 
-              type: 'completed',
-              step: currentStepNumber
-            });
-          }, 500); 
-        } else {
-          // After a delay, process the next step
-          setTimeout(() => {
-            processStep(stepIndex + 1);
-          }, Math.min(stepInterval, 1000));
-        }
-      }
-    };
-    
-    // If there are no animations in this step, move to the next step immediately
-    if (totalAnimations === 0) {
-      onAnimationComplete();
-      return;
-    }
-    
-    // Start all packets from different source nodes simultaneously
-    // For packets on the same edge (same source-target), stagger them slightly
-    Object.keys(packetsByEdge).forEach(edgeKey => {
-      const packets = packetsByEdge[edgeKey];
-      
-      // Schedule each packet on this edge with a slight delay between them
-      packets.forEach((instruction, index) => {
-        // Add delay for packets on the same edge to prevent overlap
-        const delay = index * fixedPacketInterval;
-        
-        setTimeout(() => {
-          // Add the packet log before starting animation
-          if (instruction.logIndex !== undefined) {
-            addLogToDisplay(instruction.logIndex);
-          }
-          
-          // Create a callback for this specific packet animation
-          const onPacketComplete = () => {
-            // Signal animation completion to track overall progress
-            onAnimationComplete(instruction.logIndex);
-          };
-          
-          // Send packet animation to UI
-          onStep({
-            ...instruction,
-            animationDuration: fixedPacketTravelTime,
-            onComplete: onPacketComplete
-          });
-        }, delay);
-      });
-    });
-  };
-  
-  // Start the simulation with step 0
-  processStep(0);
+  // Signal simulation is running, but NOT completed
+  onStep({ 
+    type: 'step',
+    step: 0
+  });
 };
 
 // Export for testing
@@ -411,4 +253,4 @@ if (typeof sendHelloPackets !== 'function') {
   // Export mock functions 
   exports.sendHelloPackets = mockSendHelloPackets;
   exports.floodLSP = () => {};
-} 
+}

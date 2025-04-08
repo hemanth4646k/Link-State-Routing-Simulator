@@ -7,6 +7,7 @@ import LSPPacket from './LSPPacket';
 import ControlPanel from './ControlPanel';
 import LSDBPanel from './LSDBPanel';
 import LinkCostModal from './LinkCostModal';
+import CustomPacketModal from './CustomPacketModal';
 import ThreeScene from './ThreeScene';
 import { runSimulation } from '../utils/simulationUtils';
 
@@ -21,6 +22,7 @@ const RouterSimulator = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedElements, setSelectedElements] = useState({routers: [], links: []});
   const [showLinkCostModal, setShowLinkCostModal] = useState(false);
+  const [showCustomPacketModal, setShowCustomPacketModal] = useState(false); // New state for custom packet modal
   const [lsdbData, setLsdbData] = useState({});
   const [routingTables, setRoutingTables] = useState({});
   const [simulationStatus, setSimulationStatus] = useState('idle'); // idle, running, paused, completed
@@ -94,7 +96,6 @@ const RouterSimulator = () => {
           : router
       );
       
-      console.log(`Router ${id} moved to (${boundedX}, ${boundedY})`);
       return updatedRouters;
     });
   };
@@ -213,9 +214,6 @@ const RouterSimulator = () => {
   const handleStartSimulation = () => {
     if (routers.length < 2 || links.length === 0) return;
     
-    // Clear any existing GSAP animations first
-    gsap.globalTimeline.clear();
-    
     // Reset any in-progress simulation state
     setCurrentStep(0);
     setCurrentHighlight(null);
@@ -233,7 +231,7 @@ const RouterSimulator = () => {
     setRoutingTables({});
     setProcessedLSPs({});
     
-    // Start with empty LSDBs - they will be populated when Hello packets are received
+    // Start with empty LSDBs for each router
     const initialLSDB = {};
     const initialProcessedLSPs = {};
     
@@ -252,6 +250,7 @@ const RouterSimulator = () => {
     const currentSpeed = animationSpeed;
     
     // Run the simulation with the current topology
+    // This now just initializes the simulation without automatically exchanging packets
     runSimulation(
       edgesForSimulation, 
       routers[0].id, 
@@ -262,9 +261,6 @@ const RouterSimulator = () => {
         setSimulationLogs(logs);
       }
     );
-    
-    // Set the GSAP timeline speed to match the selected animation speed
-    gsap.globalTimeline.timeScale(currentSpeed);
   };
   
   // Handle a step in the animation
@@ -294,67 +290,34 @@ const RouterSimulator = () => {
       updateLSDB(data.router, data.data);
       highlightChange(data.router, data.data);
     } else if (data.type === 'completed') {
-      // Simulation completed - now calculate routing tables using Dijkstra's
-      setSimulationStatus('completed');
+      // Only mark simulation as completed when user explicitly ends it
+      // We're not auto-completing any more
+      // Note: This block will now be handled in handleEndSimulation instead
       
-      // Directly create a basic routing table structure to guarantee it exists
-      const initialRoutingTables = {};
-      routers.forEach(router => {
-        initialRoutingTables[router.id] = {
-          self: {
-            destination: router.id,
-            nextHop: "—", // Em dash to represent direct
-            cost: 0
-          }
-        };
-      });
-      // Set initial tables immediately to ensure the UI has something to display
-      setRoutingTables(initialRoutingTables);
+      // Do not update simulation status to 'completed' here
+      // setSimulationStatus('completed');
       
-      // Force LSDB processing to complete before calculating full tables
-      const updatedLSDB = JSON.parse(JSON.stringify(lsdbData));
-      console.log("Final LSDB data:", updatedLSDB);
-      
-      // Ensure state updates are processed before calculating routing tables
-      setTimeout(() => {
-        console.log("Calculating routing tables after simulation completion");
-        
-        // Directly calculate routing tables based on current state
-        const tables = {};
-        
-        // Calculate tables for each router
+      // We still want to initialize empty routing tables for display
+      if (Object.keys(routingTables).length === 0) {
+        // Create a basic routing table structure
+        const initialRoutingTables = {};
         routers.forEach(router => {
-          tables[router.id] = calculateDijkstraForRouter(router.id, updatedLSDB);
-          
-          // Always ensure there's at least an entry for self
-          if (!tables[router.id]) {
-            tables[router.id] = {};
-          }
-          
-          // Add route to self
-          tables[router.id].self = {
-            destination: router.id,
-            nextHop: "—", // Em dash to represent direct
-            cost: 0
+          initialRoutingTables[router.id] = {
+            self: {
+              destination: router.id,
+              nextHop: "—", // Em dash to represent direct
+              cost: 0
+            }
           };
         });
-        
-        console.log("Generated routing tables:", tables);
-        
-        // Set the routing tables state
-        setRoutingTables(tables);
-        
-        // Force a re-render after tables are set
-        setTimeout(() => {
-          console.log("Routing tables keys:", Object.keys(tables));
-          setCurrentStep(prev => prev + 1);
-        }, 200);
-      }, 1000);
+        // Set initial tables
+        setRoutingTables(initialRoutingTables);
+      }
     }
   };
   
   // Animate a packet moving from source to target
-  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null) => {
+  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null, lspOwner = null) => {
     const fromRouter = routers.find(r => r.id === fromId);
     const toRouter = routers.find(r => r.id === toId);
     
@@ -377,19 +340,41 @@ const RouterSimulator = () => {
     const timestamp = Date.now();
     const packetId = `packet-${fromId}-${toId}-${timestamp}-${Math.floor(Math.random() * 1000)}`;
     
-    // Extract data from packet according to the format in flooding.js
+    // Extract data for processing in two formats:
+    // 1. The old format: "LSPA: ["B","C"]"
+    // 2. The new format: "LSP-A-2"
     let nodeId = null;
     let adjList = [];
+    let seqNumber = null;
     
     if (packetType === 'lsp' && typeof packetData === 'string') {
-      // Extract from a formatted string like "LSPA: ["B","C"]"
-      const lspMatch = packetData.match(/LSP([A-Z]): (\[[^\]]+\])/);
-      if (lspMatch) {
-        nodeId = lspMatch[1];
-        try {
-          adjList = JSON.parse(lspMatch[2]);
-        } catch (e) {
-          console.error("Error parsing LSP data:", e);
+      // Try to match the new format first: "LSP-A-2"
+      const newFormatMatch = packetData.match(/LSP-([A-Z])-(\d+)/);
+      if (newFormatMatch) {
+        // Use the explicit LSP owner if provided, otherwise use from the packet data
+        nodeId = lspOwner || newFormatMatch[1];
+        seqNumber = parseInt(newFormatMatch[2]);
+        
+        // For new format, get the ACTUAL established neighbors from LSDB
+        // A neighbor is only established if BOTH routers know about each other
+        // This means the owner router should have them in its LSDB
+        if (lsdbData[nodeId] && lsdbData[nodeId][nodeId]) {
+          // Use the confirmed neighbors from LSDB rather than physical links
+          adjList = lsdbData[nodeId][nodeId];
+        } else {
+          // If no LSDB entry found, router doesn't know any neighbors yet
+          adjList = [];
+        }
+      } else {
+        // Fall back to the old format: "LSPA: ["B","C"]"
+        const oldFormatMatch = packetData.match(/LSP([A-Z]): (\[[^\]]+\])/);
+        if (oldFormatMatch) {
+          nodeId = oldFormatMatch[1];
+          try {
+            adjList = JSON.parse(oldFormatMatch[2]);
+          } catch (e) {
+            console.error("Error parsing LSP data:", e);
+          }
         }
       }
     }
@@ -398,7 +383,7 @@ const RouterSimulator = () => {
       id: packetId,
       from: fromId,
       to: toId,
-      data: nodeId && adjList.length ? [nodeId, adjList] : packetData, // Use parsed data if available
+      data: packetData, // Store the original packet data for display
       type: packetType,
       x: fromX,
       y: fromY,
@@ -450,18 +435,9 @@ const RouterSimulator = () => {
         
         // Update LSDB based on packet type
         if (packetType === 'lsp') {
-          // For LSP packets, update the LSDB with the link state information
-          let updateData;
-          
-          if (Array.isArray(newPacket.data)) {
-            // If we already parsed the data correctly in the packet creation
-            updateData = newPacket.data;
-          } else if (Array.isArray(packetData)) {
-            // If the data was provided as an array directly from simulationUtils
-            updateData = packetData;
-          }
-          
-          if (updateData && updateData.length === 2) {
+          if (nodeId && adjList) {
+            // Create the data for LSDB update with the router adjList
+            const updateData = [nodeId, adjList];
             updateLSDB(toId, updateData);
             highlightChange(toId, updateData);
           }
@@ -483,6 +459,7 @@ const RouterSimulator = () => {
   // Process a Hello packet from one router to another
   const updateHelloPacket = (fromId, toId) => {
     // When a router receives a Hello packet, it adds the sender as a neighbor
+    // But the sender doesn't automatically know about the receiver
     setLsdbData(prev => {
       const updated = JSON.parse(JSON.stringify(prev));
       
@@ -502,18 +479,10 @@ const RouterSimulator = () => {
       neighbors.add(fromId);
       updated[toId][toId] = Array.from(neighbors).sort();
       
-      // Similarly, the source also learns that the target is a neighbor
-      if (!updated[fromId]) {
-        updated[fromId] = {};
-      }
-      
-      if (!updated[fromId][fromId]) {
-        updated[fromId][fromId] = [];
-      }
-      
-      const sourceNeighbors = new Set(updated[fromId][fromId]);
-      sourceNeighbors.add(toId);
-      updated[fromId][fromId] = Array.from(sourceNeighbors).sort();
+      // IMPORTANT: The sender does NOT automatically learn about the target
+      // This is a one-way hello packet. The target learns about the sender,
+      // but the sender doesn't learn about the target unless it receives 
+      // a hello packet from the target.
       
       // Add to processed LSPs 
       setProcessedLSPs(lspPrev => {
@@ -523,6 +492,7 @@ const RouterSimulator = () => {
           lspUpdated[toId] = new Set();
         }
         
+        // Initialize the sender's entry if needed but don't update neighbors
         if (!lspUpdated[fromId]) {
           lspUpdated[fromId] = new Set();
         }
@@ -540,14 +510,12 @@ const RouterSimulator = () => {
   // Update a router's LSDB with new data
   const updateLSDB = (routerId, data) => {
     if (!data || !Array.isArray(data) || data.length < 2) {
-      console.error("Invalid LSDB update data:", data);
       return;
     }
     
     const [nodeId, adjList] = data;
     
     if (!nodeId) {
-      console.error("Missing nodeId in LSDB update");
       return;
     }
     
@@ -565,7 +533,6 @@ const RouterSimulator = () => {
       
       // If router has already processed this LSP, skip the update
       if (updated[routerId].has(lspKey)) {
-        console.log(`Router ${routerId} has already processed ${lspKey}, skipping update`);
         return updated;
       }
       
@@ -585,7 +552,42 @@ const RouterSimulator = () => {
         // Update with the new adjacency list
         lsdbUpdated[routerId][nodeId] = adjList;
         
-        console.log(`Updated LSDB for Router ${routerId}, added/updated node ${nodeId} with adj list:`, adjList);
+        // Update routing tables immediately to reflect the new LSDB information
+        // This ensures the left panel shows updated information after each packet
+        setTimeout(() => {
+          // Calculate updated routing tables for this router
+          const routerTables = calculateDijkstraForRouter(routerId, lsdbUpdated);
+          
+          // Update routing tables state with the new information
+          setRoutingTables(prevTables => {
+            const updatedTables = { ...prevTables };
+            
+            // Initialize router entry if it doesn't exist
+            if (!updatedTables[routerId]) {
+              updatedTables[routerId] = {};
+            }
+            
+            // Add self-route if missing
+            if (!updatedTables[routerId].self) {
+              updatedTables[routerId].self = {
+                destination: routerId,
+                nextHop: "—", // Em dash to represent direct
+                cost: 0
+              };
+            }
+            
+            // Merge in the new calculated routes
+            if (routerTables) {
+              Object.keys(routerTables).forEach(destId => {
+                if (destId !== 'self') {
+                  updatedTables[routerId][destId] = routerTables[destId];
+                }
+              });
+            }
+            
+            return updatedTables;
+          });
+        }, 10); // Very small timeout to ensure state updates have completed
         
         return lsdbUpdated;
       });
@@ -597,7 +599,6 @@ const RouterSimulator = () => {
   // Highlight a change in the LSDB
   const highlightChange = (routerId, data) => {
     if (!data || !Array.isArray(data) || !data[0]) {
-      console.error("Invalid highlight data:", data);
       return;
     }
     
@@ -608,10 +609,8 @@ const RouterSimulator = () => {
       timestamp: Date.now() // Add timestamp to ensure state update is detected
     });
     
-    // Clear the highlight after 500ms (reduced from 800ms for faster transitions)
-    setTimeout(() => {
-      setCurrentHighlight(null);
-    }, 500);
+    // Clear the highlight immediately instead of using setTimeout
+    setCurrentHighlight(null);
   };
   
   // Calculate routing tables for all routers - this is kept for reference but not used directly
@@ -794,38 +793,55 @@ const RouterSimulator = () => {
   // Handle simulation pause
   const handlePauseSimulation = () => {
     setSimulationStatus('paused');
-    // Pause GSAP animations
-    gsap.globalTimeline.pause();
   };
   
   // Handle simulation resume
   const handleResumeSimulation = () => {
     setSimulationStatus('running');
-    // Resume GSAP animations with current speed
-    gsap.globalTimeline.play();
-    gsap.globalTimeline.timeScale(animationSpeed);
   };
   
   // Handle simulation end
   const handleEndSimulation = () => {
-    setSimulationStatus('idle');
-    // Clear all animations
-    gsap.globalTimeline.clear();
-    setPackets([]);
-    setCurrentStep(0);
+    setSimulationStatus('completed');
     
-    // Clear any pending timeouts
-    const highestTimeoutId = setTimeout(() => {}, 0);
-    for (let i = 0; i < highestTimeoutId; i++) {
-      clearTimeout(i);
-    }
+    // Clear all animations
+    setPackets([]);
+    
+    // Calculate routing tables based on current LSDB data
+    const updatedLSDB = JSON.parse(JSON.stringify(lsdbData));
+    console.log("Final LSDB data:", updatedLSDB);
+    
+    // Calculate routing tables
+    console.log("Calculating routing tables after simulation completion");
+    
+    // Calculate tables for each router
+    const tables = {};
+    routers.forEach(router => {
+      tables[router.id] = calculateDijkstraForRouter(router.id, updatedLSDB);
+      
+      // Always ensure there's at least an entry for self
+      if (!tables[router.id]) {
+        tables[router.id] = {};
+      }
+      
+      // Add route to self
+      tables[router.id].self = {
+        destination: router.id,
+        nextHop: "—", // Em dash to represent direct
+        cost: 0
+      };
+    });
+    
+    console.log("Generated routing tables:", tables);
+    setRoutingTables(tables);
+    console.log("Routing tables keys:", Object.keys(tables));
+    
+    // Update step counter
+    setCurrentStep(prev => prev + 1);
   };
   
   // Handle simulation reset - keeps routers and links but resets simulation data
   const handleResetSimulation = () => {
-    // Clear all animations first
-    gsap.globalTimeline.clear();
-    
     // Reset simulation data, but keep routers and links
     setLsdbData({});
     setRoutingTables({});
@@ -842,22 +858,11 @@ const RouterSimulator = () => {
     if (animationSpeed !== 0.5) {
       setAnimationSpeed(0.5);
     }
-    
-    // Clear any pending timeouts
-    const highestTimeoutId = setTimeout(() => {}, 0);
-    for (let i = 0; i < highestTimeoutId; i++) {
-      clearTimeout(i);
-    }
   };
   
   // Handle speed change
   const handleSpeedChange = (speed) => {
     setAnimationSpeed(speed);
-    
-    // Update existing animations
-    if (simulationStatus === 'running') {
-      gsap.globalTimeline.timeScale(speed);
-    }
   };
   
   // Toggle connect mode
@@ -874,6 +879,76 @@ const RouterSimulator = () => {
   
   const toggleRightPanel = () => {
     setRightPanelVisible(!rightPanelVisible);
+  };
+  
+  // Handle sending a custom packet
+  const handleSendCustomPacket = () => {
+    // Only allow sending custom packets during simulation
+    if (simulationStatus !== 'running' && simulationStatus !== 'paused') return;
+    
+    // Show the custom packet modal
+    setShowCustomPacketModal(true);
+  };
+  
+  // Process the custom packet from the modal
+  const handleCustomPacketSubmit = (packetData) => {
+    if (packetData.type === 'hello') {
+      // Check if the routers are actually neighbors (connected by a link)
+      const areNeighbors = links.some(link => 
+        (link.source === packetData.source && link.target === packetData.target) ||
+        (link.source === packetData.target && link.target === packetData.source)
+      );
+      
+      if (!areNeighbors) {
+        alert(`Routers ${packetData.source} and ${packetData.target} are not neighbors. Hello packets can only be exchanged between directly connected routers.`);
+        return;
+      }
+      
+      // Animate a Hello packet between specified routers
+      animatePacket(
+        packetData.source,
+        packetData.target,
+        `Hello packet from ${packetData.source} to ${packetData.target}`,
+        'hello'
+      );
+    } else if (packetData.type === 'lsp') {
+      // Check if the source and target are neighbors for LSP (since only neighbors can directly exchange LSPs)
+      const areNeighbors = links.some(link => 
+        (link.source === packetData.source && link.target === packetData.target) ||
+        (link.source === packetData.target && link.target === packetData.source)
+      );
+      
+      if (!areNeighbors) {
+        alert(`Routers ${packetData.source} and ${packetData.target} are not neighbors. LSPs can only be sent between directly connected routers.`);
+        return;
+      }
+      
+      // Check for bidirectional hello exchange - source must know target as a neighbor
+      // This checks if the target is in the source's neighbor list
+      const sourceLSDB = lsdbData[packetData.source];
+      const bidirectionalExchange = sourceLSDB && 
+                                   sourceLSDB[packetData.source] && 
+                                   sourceLSDB[packetData.source].includes(packetData.target);
+      
+      if (!bidirectionalExchange) {
+        alert(`Router ${packetData.source} doesn't recognize ${packetData.target} as a neighbor yet. A bidirectional hello packet exchange is required before LSPs can be sent.`);
+        return;
+      }
+      
+      // Create LSP content with the format: LSP-A-2 where A is the owner (not the sender)
+      const lspContent = `LSP-${packetData.lspOwner}-${packetData.sequenceNumber}`;
+      
+      // Send LSP from source to target
+      animatePacket(
+        packetData.source,
+        packetData.target,
+        lspContent,
+        'lsp',
+        1000,
+        null,
+        packetData.lspOwner  // Pass the LSP owner explicitly
+      );
+    }
   };
   
   return (
@@ -919,6 +994,13 @@ const RouterSimulator = () => {
                 Delete Selected
               </button>
             )}
+            <button 
+              onClick={handleSendCustomPacket}
+              className="custom-button"
+              disabled={simulationStatus !== 'running' && simulationStatus !== 'paused'}
+            >
+              Send Custom Packet
+            </button>
           </div>
         </div>
         
@@ -1000,6 +1082,16 @@ const RouterSimulator = () => {
               setConnectMode(false);
             }}
             onAddLink={handleAddLink}
+          />
+        )}
+        
+        {/* Custom packet modal overlay */}
+        {showCustomPacketModal && (
+          <CustomPacketModal
+            onClose={() => setShowCustomPacketModal(false)}
+            onSendPacket={handleCustomPacketSubmit}
+            routers={routers}
+            lsdbData={lsdbData}
           />
         )}
       </div>

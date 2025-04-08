@@ -7,6 +7,7 @@ const ControlPanel = ({
   onEndSimulation,
   onResetSimulation,
   onSpeedChange,
+  onSendCustomPacket,
   simulationStatus,
   speed,
   disabled,
@@ -63,6 +64,15 @@ const ControlPanel = ({
           {isCompleted && (
             <button onClick={onResetSimulation} className="reset-button">
               Reset Simulation
+            </button>
+          )}
+          
+          {(isRunning || isPaused) && (
+            <button 
+              onClick={onSendCustomPacket} 
+              className="custom-button"
+            >
+              Custom Packet
             </button>
           )}
         </div>

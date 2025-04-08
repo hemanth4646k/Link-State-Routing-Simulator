@@ -1,0 +1,1 @@
+add a ghost going up action for discarded packets
