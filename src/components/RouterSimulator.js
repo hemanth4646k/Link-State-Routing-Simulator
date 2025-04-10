@@ -712,17 +712,39 @@ const RouterSimulator = () => {
             if (forwardingTargets.length > 0) {
               console.log(`Router ${routerId} queueing LSP-${lspOwner}-${seqNumber} to be forwarded to ${forwardingTargets.length} neighbors in next step`);
               
-              // Queue forwards for the next step instead of sending immediately
-              setPendingLSPForwards(prev => [
-                ...prev,
-                ...forwardingTargets.map(targetId => ({
-                  from: routerId,
-                  to: targetId,
-                  lspOwner: lspOwner,
-                  sequenceNumber: seqNumber,
-                  content: `LSP-${lspOwner}-${seqNumber}`
-                }))
-              ]);
+              // Create a map of existing pending forwards to prevent duplicates
+              // We'll use this to check before adding new forwards
+              setPendingLSPForwards(prev => {
+                // Create a map of existing forwards for duplicate checking
+                const existingForwards = new Map();
+                prev.forEach(forward => {
+                  const key = `${forward.from}-${forward.to}-${forward.lspOwner}-${forward.sequenceNumber}`;
+                  existingForwards.set(key, true);
+                });
+                
+                // Only add forwards that don't exist yet
+                const newForwards = forwardingTargets
+                  .map(targetId => {
+                    const forwardKey = `${routerId}-${targetId}-${lspOwner}-${seqNumber}`;
+                    // Only include if not already in the queue
+                    if (!existingForwards.has(forwardKey)) {
+                      return {
+                        from: routerId,
+                        to: targetId,
+                        lspOwner: lspOwner,
+                        sequenceNumber: seqNumber,
+                        content: `LSP-${lspOwner}-${seqNumber}`
+                      };
+                    }
+                    return null;
+                  })
+                  .filter(forward => forward !== null); // Remove any nulls
+                
+                console.log(`Adding ${newForwards.length} new forwards, skipping ${forwardingTargets.length - newForwards.length} duplicates`);
+                
+                // Combine with existing forwards
+                return [...prev, ...newForwards];
+              });
             } else {
               console.log(`Router ${routerId} has no other neighbors to forward the LSP to`);
             }
@@ -1150,19 +1172,41 @@ const RouterSimulator = () => {
       // Clear the pending queue immediately to prevent double-processing
       setPendingLSPForwards([]);
       
-      // Process each forward
+      // Group forwards by source router to add staggered delays
+      const forwardsBySource = {};
       forwardsToProcess.forEach(forward => {
-        console.log(`Forwarding LSP-${forward.lspOwner}-${forward.sequenceNumber} from ${forward.from} to ${forward.to}`);
-        animatePacket(
-          forward.from,
-          forward.to,
-          forward.content,
-          'lsp',
-          1000,
-          null,
-          forward.lspOwner,
-          forward.sequenceNumber
-        );
+        if (!forwardsBySource[forward.from]) {
+          forwardsBySource[forward.from] = [];
+        }
+        forwardsBySource[forward.from].push(forward);
+      });
+      
+      // Process each group of forwards with staggered delays
+      Object.entries(forwardsBySource).forEach(([sourceRouter, forwards]) => {
+        // Calculate equal time intervals for packet animations from the same source
+        const totalForwardsFromSource = forwards.length;
+        const baseDelay = 500; // increased from 300ms to 500ms
+        
+        // Process each forward with a staggered delay
+        forwards.forEach((forward, index) => {
+          const staggeredDelay = index * baseDelay;
+          
+          console.log(`Forwarding LSP-${forward.lspOwner}-${forward.sequenceNumber} from ${forward.from} to ${forward.to} with delay ${staggeredDelay}ms`);
+          
+          // Use setTimeout to stagger the animations
+          setTimeout(() => {
+            animatePacket(
+              forward.from,
+              forward.to,
+              forward.content,
+              'lsp',
+              1000,
+              null,
+              forward.lspOwner,
+              forward.sequenceNumber
+            );
+          }, staggeredDelay);
+        });
       });
       
       // After processing LSP forwards, we're done for this step
@@ -1194,7 +1238,7 @@ const RouterSimulator = () => {
     
     // Check for new links that haven't established hello packets yet
     let newLinksFound = false;
-    links.forEach(link => {
+    links.forEach((link, linkIndex) => {
       const connectionKey = [link.source, link.target].sort().join('-');
       
       // If this link isn't in the established connections, it's a new link
@@ -1202,24 +1246,32 @@ const RouterSimulator = () => {
         console.log(`Detected new link: ${link.source} <-> ${link.target}`);
         newLinksFound = true;
         
-        // Send hello packets in both directions
+        // Base delay for staggering hello packets
+        const baseDelay = 500; // increased from 300ms to 500ms
+        const linkDelay = linkIndex * baseDelay;
+        
+        // Send hello packets in both directions with staggered delays
         // From source to target
-        animatePacket(
-          link.source,
-          link.target,
-          `Hello packet from ${link.source} to ${link.target}`,
-          'hello'
-        );
+        setTimeout(() => {
+          animatePacket(
+            link.source,
+            link.target,
+            `Hello packet from ${link.source} to ${link.target}`,
+            'hello'
+          );
+        }, linkDelay);
         
-        // From target to source
-        animatePacket(
-          link.target,
-          link.source,
-          `Hello packet from ${link.target} to ${link.source}`,
-          'hello'
-        );
+        // From target to source (add a small additional delay)
+        setTimeout(() => {
+          animatePacket(
+            link.target,
+            link.source,
+            `Hello packet from ${link.target} to ${link.source}`,
+            'hello'
+          );
+        }, linkDelay + 250); // increased from 150ms to 250ms for better spacing
         
-        console.log(`Initiated hello packet exchange for new link: ${link.source} <-> ${link.target}`);
+        console.log(`Initiated hello packet exchange for new link: ${link.source} <-> ${link.target} with delay ${linkDelay}ms`);
       }
     });
     
@@ -1315,19 +1367,28 @@ const RouterSimulator = () => {
       
       console.log(`Router ${routerId} flooding LSP with sequence ${seqNumber} to ${neighbors.length} neighbors:`, neighbors);
       
-      // Send an LSP from this router to each of its neighbors
-      neighbors.forEach(neighborId => {
-        console.log(`Sending LSP-${routerId}-${seqNumber} from ${routerId} to ${neighborId}`);
-        animatePacket(
-          routerId,
-          neighborId,
-          `LSP-${routerId}-${seqNumber}`,
-          'lsp',
-          1000,
-          null,
-          routerId,
-          seqNumber // Pass sequence number directly
-        );
+      // Calculate equal time intervals for packet animations
+      const baseDelay = 500; // increased from 300ms to 500ms
+      
+      // Send an LSP from this router to each of its neighbors with staggered delays
+      neighbors.forEach((neighborId, index) => {
+        const staggeredDelay = index * baseDelay;
+        
+        console.log(`Sending LSP-${routerId}-${seqNumber} from ${routerId} to ${neighborId} with delay ${staggeredDelay}ms`);
+        
+        // Use setTimeout to stagger the animations
+        setTimeout(() => {
+          animatePacket(
+            routerId,
+            neighborId,
+            `LSP-${routerId}-${seqNumber}`,
+            'lsp',
+            1000,
+            null,
+            routerId,
+            seqNumber // Pass sequence number directly
+          );
+        }, staggeredDelay);
       });
     });
     
