@@ -52,24 +52,38 @@ code {
 
 .modal-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-content: space-between;
+  margin-top: 20px;
 }
 
 .modal-actions button {
   padding: 8px 16px;
-  border: none;
   border-radius: 4px;
   cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s, transform 0.1s;
 }
 
 .modal-actions button[type="submit"] {
   background-color: #4CAF50;
   color: white;
+  border: none;
+}
+
+.modal-actions button[type="submit"]:hover {
+  background-color: #3e8e41;
+  transform: scale(1.05);
 }
 
 .modal-actions button[type="button"] {
-  background-color: #f1f1f1;
+  background-color: #f44336;
+  color: white;
+  border: none;
+}
+
+.modal-actions button[type="button"]:hover {
+  background-color: #d32f2f;
+  transform: scale(1.05);
 }
 
 /* Router simulator */
@@ -98,6 +112,16 @@ code {
   border-radius: 4px;
   cursor: grab;
   user-select: none;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.router-template:hover {
+  background-color: #3e8e41;
+  transform: scale(1.02);
+}
+
+.router-template:active {
+  cursor: grabbing;
 }
 
 .toolbox button {
@@ -119,12 +143,69 @@ code {
 }
 
 /* Router node */
+.router-node {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #3498db;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
 .router-node.selected {
-  border: 3px solid yellow;
+  background-color: #e74c3c;
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.5);
+  z-index: 20;
 }
 
 .router-node.disabled {
   cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* LSP acceptance/rejection glow effects */
+.router-node.glow-accept {
+  box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.8); /* Green glow */
+  animation: pulseGreen 0.2s ease-in-out;
+}
+
+.router-node.glow-reject {
+  box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.8); /* Red glow */
+  animation: pulseRed 0.2s ease-in-out;
+}
+
+.router-node.glow-receive {
+  box-shadow: 0 0 20px 10px rgba(52, 152, 219, 0.8); /* Blue glow */
+  animation: pulseBlue 0.2s ease-in-out;
+}
+
+@keyframes pulseGreen {
+  0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.1); }
+  50% { box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.8); }
+  100% { box-shadow: 0 0 25px 15px rgba(46, 204, 113, 0.1); }
+}
+
+@keyframes pulseRed {
+  0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.1); }
+  50% { box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.8); }
+  100% { box-shadow: 0 0 25px 15px rgba(231, 76, 60, 0.1); }
+}
+
+@keyframes pulseBlue {
+  0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.1); }
+  50% { box-shadow: 0 0 20px 10px rgba(52, 152, 219, 0.8); }
+  100% { box-shadow: 0 0 25px 15px rgba(52, 152, 219, 0.1); }
 }
 
 /* Control panel */
@@ -209,4 +290,50 @@ code {
   0% { background-color: #e3f2fd; }
   50% { background-color: #bbdefb; }
   100% { background-color: #e3f2fd; }
+}
+
+/* Icon for Step Forward button */
+.icon-step-forward {
+  display: inline-block;
+  font-size: 0.8em;
+  margin-right: 5px;
+  position: relative;
+  top: -1px;
+}
+
+/* Cursor styles for all buttons */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Next Step button cursor styles */
+.next-step-button:not(:disabled) {
+  cursor: pointer;
+}
+
+.next-step-button:disabled {
+  cursor: not-allowed;
+}
+
+/* Toolbox button styles when active in paused state */
+.toolbox button.active {
+  background-color: #0056b3;
+}
+
+/* LSDB Table styles */
+.router-column {
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+  text-align: center;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -4,6 +4,25 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
   const nodeRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
+  const [glowEffect, setGlowEffect] = useState(null); // null, 'accept', 'reject', or 'receive'
+  
+  // Function to make router glow with appropriate color
+  const glow = (effect) => {
+    // Set glow effect state based on the type of effect
+    setGlowEffect(effect);
+    
+    // Clear glow effect after 200ms
+    setTimeout(() => {
+      setGlowEffect(null);
+    }, 200);
+  };
+  
+  // Expose the glow function via ref
+  useEffect(() => {
+    if (nodeRef.current) {
+      nodeRef.current.glow = glow;
+    }
+  }, []);
   
   const handleMouseDown = (e) => {
     // Prevent default to stop text selection
@@ -132,15 +151,46 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
     }
   };
   
+  // Generate CSS for the glow effect
+  const getGlowStyles = () => {
+    if (!glowEffect) return {};
+    
+    let color, shadowColor;
+    
+    switch (glowEffect) {
+      case 'accept':
+        color = '#2ecc71'; // Green for acceptance
+        shadowColor = 'rgba(46, 204, 113, 0.8)';
+        break;
+      case 'reject':
+        color = '#e74c3c'; // Red for rejection
+        shadowColor = 'rgba(231, 76, 60, 0.8)';
+        break;
+      case 'receive':
+        color = '#3498db'; // Blue for packet reception
+        shadowColor = 'rgba(52, 152, 219, 0.8)';
+        break;
+      default:
+        return {};
+    }
+    
+    return {
+      boxShadow: `0 0 15px 5px ${shadowColor}`,
+      filter: `drop-shadow(0 0 5px ${color})`,
+      transition: 'box-shadow 0.1s ease-in-out, filter 0.1s ease-in-out',
+    };
+  };
+  
   return (
     <div
       ref={nodeRef}
       id={`router-${id}`}
-      className={`router-node ${isSelected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
+      className={`router-node ${isSelected ? 'selected' : ''} ${disabled ? 'disabled' : ''} ${glowEffect ? `glow-${glowEffect}` : ''}`}
       style={{
         left: `${x}px`,
         top: `${y}px`,
-        cursor: connectMode ? 'pointer' : disabled ? 'not-allowed' : isDragging ? 'grabbing' : 'grab'
+        cursor: connectMode ? 'pointer' : disabled ? 'not-allowed' : isDragging ? 'grabbing' : 'grab',
+        ...getGlowStyles()
       }}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}

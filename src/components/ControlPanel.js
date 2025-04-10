@@ -13,10 +13,12 @@ const ControlPanel = ({
   simulationStatus,
   speed,
   disabled,
-  currentStep
+  currentStep,
+  isPaused,
+  animationInProgress
 }) => {
   const isRunning = simulationStatus === 'running';
-  const isPaused = simulationStatus === 'paused';
+  const isPausedState = simulationStatus === 'paused';
   const isCompleted = simulationStatus === 'completed';
   
   // State for collapsible sections
@@ -39,44 +41,64 @@ const ControlPanel = ({
         <div className="button-container">
           <button
             onClick={onStartSimulation}
-            disabled={disabled || isRunning || isPaused}
+            disabled={disabled || isRunning || isPausedState || isPaused}
             className="primary-button"
           >
             Start Simulation
           </button>
           
           {isRunning && (
-            <button onClick={onPauseSimulation} className="control-button">
+            <button 
+              onClick={onPauseSimulation} 
+              className="control-button"
+              disabled={isPaused}
+            >
               Pause
             </button>
           )}
           
-          {isPaused && (
+          {isPausedState && (
             <button onClick={onResumeSimulation} className="control-button">
               Resume
             </button>
           )}
           
-          {(isRunning || isPaused) && (
-            <button onClick={onNextStep} className="control-button">
-              Next Step
-            </button>
-          )}
+          {/* Next step button - only shown during simulation */}
+          <button 
+            className={`control-button next-step-button ${simulationStatus !== 'running' ? 'hidden' : ''}`}
+            onClick={onNextStep}
+            disabled={simulationStatus !== 'running' || isPaused || animationInProgress}
+            title={animationInProgress ? "Wait for current animation to complete" : "Run the next step of the simulation"}
+          >
+            <span className="icon-step-forward">▶</span> Next Step
+          </button>
           
-          {(isRunning || isPaused) && (
-            <button onClick={onEditTopology} className="control-button">
+          {(isRunning || isPausedState) && (
+            <button 
+              onClick={onEditTopology} 
+              className="control-button"
+              disabled={isPaused}
+            >
               Edit Topology
             </button>
           )}
           
-          {(isRunning || isPaused) && (
-            <button onClick={onEndSimulation} className="control-button">
+          {(isRunning || isPausedState) && (
+            <button 
+              onClick={onEndSimulation} 
+              className="control-button"
+              disabled={isPaused}
+            >
               End Simulation
             </button>
           )}
           
           {isCompleted && (
-            <button onClick={onResetSimulation} className="reset-button">
+            <button 
+              onClick={onResetSimulation} 
+              className="reset-button"
+              disabled={isPaused}
+            >
               Reset Simulation
             </button>
           )}
@@ -98,7 +120,7 @@ const ControlPanel = ({
             step="0.1"
             value={speed}
             onChange={handleSpeedChange}
-            disabled={!isRunning && !isPaused}
+            disabled={(!isRunning && !isPausedState) || isPaused}
           />
           <div className="speed-value">{speed.toFixed(1)}x</div>
         </div>

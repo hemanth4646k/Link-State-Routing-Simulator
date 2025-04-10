@@ -34,6 +34,8 @@ const RouterSimulator = () => {
   const [simulationLogs, setSimulationLogs] = useState([]); // Store logs from flooding.js
   const [routerSequenceNumbers, setRouterSequenceNumbers] = useState({}); // Track sequence numbers for each router's LSPs
   const [pendingLSPForwards, setPendingLSPForwards] = useState([]); // Queue of LSPs to be forwarded in the next step
+  const [isPaused, setIsPaused] = useState(false);
+  const [animationInProgress, setAnimationInProgress] = useState(false);
   
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
@@ -104,8 +106,8 @@ const RouterSimulator = () => {
   
   // Handle router click - used for creating links or selecting elements
   const handleRouterClick = (id) => {
-    // If in simulation, don't allow selection
-    if (simulationStatus === 'running') return;
+    // If in simulation and not paused, don't allow selection
+    if (simulationStatus === 'running' && !isPaused) return;
     
     if (connectMode) {
       if (selectedRouters.length === 0) {
@@ -149,15 +151,13 @@ const RouterSimulator = () => {
   
   // Toggle selection mode
   const toggleSelectionMode = () => {
-    // Clear existing selections when toggling
-    setSelectedElements({routers: [], links: []});
-    
-    // Toggle the mode
-    const newSelectionMode = !selectionMode;
-    setSelectionMode(newSelectionMode);
-    
-    // Disable connect mode if we're entering selection mode
-    if (newSelectionMode) {
+    if (selectionMode) {
+      // If turning off selection mode, clear selected elements
+      setSelectionMode(false);
+      setSelectedElements({routers: [], links: []});
+    } else {
+      // If turning on selection mode, turn off connect mode
+      setSelectionMode(true);
       setConnectMode(false);
       setSelectedRouters([]);
     }
@@ -664,6 +664,12 @@ const RouterSimulator = () => {
   
   // Animate a packet moving from source to target
   const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null, lspOwner = null, sequenceNumber = null) => {
+    // Don't start new animations if paused
+    if (isPaused) return;
+    
+    // Set animation in progress
+    setAnimationInProgress(true);
+    
     const fromRouter = routers.find(r => r.id === fromId);
     const toRouter = routers.find(r => r.id === toId);
     
@@ -772,22 +778,9 @@ const RouterSimulator = () => {
     // Add packet to state
     setPackets(prev => [...prev, newPacket]);
     
-    // Calculate distance between routers for adaptive timing
-    const dx = toX - fromX;
-    const dy = toY - fromY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Calculate appropriate animation duration based on distance
-    // Cap between 0.3 seconds and 8 seconds (depending on speed)
-    const minDuration = 0.3;
-    const maxDuration = 5 / animationSpeed; // Reduced max duration for better experience
-    
-    // Calculate duration based on distance and animation speed
-    const distanceFactor = Math.min(1.0, distance / 500); // Normalize distance
-    const baseDuration = (minDuration + (maxDuration - minDuration) * distanceFactor) / animationSpeed;
-    
-    // Calculate final duration with a minimum for short distances
-    const durationInSeconds = Math.max(minDuration, baseDuration);
+    // Use a fixed duration for all packets regardless of distance
+    // This ensures all packets reach their destinations at the same time
+    const durationInSeconds = 1.0 / animationSpeed;
     
     // Create a GSAP animation to update the packet position
     gsap.to({}, {
@@ -816,6 +809,18 @@ const RouterSimulator = () => {
         // Remove packet when animation completes
         setPackets(prev => prev.filter(p => p.id !== packetId));
         
+        // Make the receiving router glow to indicate packet reception
+        // 1. Trigger the 2D router node glow
+        const receivingRouterNode = document.getElementById(`router-${toId}`);
+        if (receivingRouterNode && receivingRouterNode.glow) {
+          receivingRouterNode.glow('receive');
+        }
+        
+        // 2. Trigger the 3D router glow in ThreeScene
+        if (window[`router3D_${toId}`] && window[`router3D_${toId}`].glow) {
+          window[`router3D_${toId}`].glow('receive');
+        }
+        
         // Update LSDB based on packet type
         if (packetType === 'lsp') {
           if (nodeId && adjList) {
@@ -838,6 +843,9 @@ const RouterSimulator = () => {
           // Call the callback immediately to avoid waiting
           externalCallback();
         }
+        
+        // Mark animation as completed
+        setAnimationInProgress(false);
       }
     });
   };
@@ -949,9 +957,20 @@ const RouterSimulator = () => {
     const alreadyProcessed = processedLSPs[routerId] && processedLSPs[routerId].has(lspKey);
     console.log(`Router ${routerId} processing LSP ${lspKey} - Already processed: ${alreadyProcessed}`);
     
+    // Get the router DOM node to trigger glow effect
+    const routerNode = document.getElementById(`router-${routerId}`);
+    
     // If router has already processed this exact LSP, skip the update
     if (alreadyProcessed) {
       console.log(`Router ${routerId} skipping already processed LSP: ${lspKey}`);
+      // Add red glow if the router node exists
+      if (routerNode && routerNode.glow) {
+        routerNode.glow(false); // False = rejection (red glow)
+      }
+      // Also glow the 3D router
+      if (window[`router3D_${routerId}`] && window[`router3D_${routerId}`].glow) {
+        window[`router3D_${routerId}`].glow('reject');
+      }
       return;
     }
     
@@ -975,17 +994,44 @@ const RouterSimulator = () => {
         console.log(`Router ${routerId} will process and forward LSP from ${lspOwner} with sequence ${seqNumber} (current: ${currentSeq})`);
         shouldForward = true;
         shouldUpdateLSDB = true;
+        
+        // Add green glow if the router node exists
+        if (routerNode && routerNode.glow) {
+          routerNode.glow(true); // True = acceptance (green glow)
+        }
+        // Also glow the 3D router
+        if (window[`router3D_${routerId}`] && window[`router3D_${routerId}`].glow) {
+          window[`router3D_${routerId}`].glow('accept');
+        }
       } else {
         console.log(`Router ${routerId} discarded LSP from ${lspOwner} with sequence ${seqNumber} (already has ${currentSeq})`);
+        // Add red glow if the router node exists
+        if (routerNode && routerNode.glow) {
+          routerNode.glow(false); // False = rejection (red glow)
+        }
+        // Also glow the 3D router
+        if (window[`router3D_${routerId}`] && window[`router3D_${routerId}`].glow) {
+          window[`router3D_${routerId}`].glow('reject');
+        }
         return; // Skip processing entirely
       }
     } else {
       // If no sequence number, we'll still update LSDB but not forward
       console.log(`Router ${routerId} received LSP without sequence number, will update LSDB but not forward`);
       shouldUpdateLSDB = true;
+      
+      // Add green glow if the router node exists
+      if (routerNode && routerNode.glow) {
+        routerNode.glow(true); // True = acceptance (green glow)
+      }
+      // Also glow the 3D router
+      if (window[`router3D_${routerId}`] && window[`router3D_${routerId}`].glow) {
+        window[`router3D_${routerId}`].glow('accept');
+      }
     }
     
     // Now update processed LSPs to mark this LSP as processed
+    // Include sequence number in the key to properly track processed LSPs
     setProcessedLSPs(prev => {
       const updated = { ...prev };
       
@@ -994,8 +1040,11 @@ const RouterSimulator = () => {
         updated[routerId] = new Set();
       }
       
+      // Create a more specific LSP key that includes the sequence number
+      const sequencedLspKey = seqNumber ? `LSP${nodeId}-${seqNumber}: ${JSON.stringify(adjList)}` : lspKey;
+      
       // Mark it as processed
-      updated[routerId].add(lspKey);
+      updated[routerId].add(sequencedLspKey);
       
       return updated;
     });
@@ -1011,10 +1060,13 @@ const RouterSimulator = () => {
           lsdbUpdated[routerId] = {};
         }
         
+        // Sort the adjacency list to ensure consistent comparisons
+        const sortedAdjList = [...adjList].sort();
+        
         // Update the adjacency list - no connectivity checks needed
         // Each router should maintain info about all routers in the network
-        lsdbUpdated[routerId][nodeId] = adjList;
-        console.log(`Router ${routerId} updated LSDB with ${nodeId}'s adjacency list:`, adjList);
+        lsdbUpdated[routerId][nodeId] = sortedAdjList;
+        console.log(`Router ${routerId} updated LSDB with ${nodeId}'s adjacency list:`, sortedAdjList);
         
         // Update sequence number if provided
         if (seqNumber !== null) {
@@ -1306,11 +1358,25 @@ const RouterSimulator = () => {
   // Handle simulation pause
   const handlePauseSimulation = () => {
     setSimulationStatus('paused');
+    setIsPaused(true);
+    
+    // Pause all GSAP animations
+    gsap.globalTimeline.pause();
+    
+    // Clear any pending timeouts
+    const highestId = setTimeout(() => {}, 0);
+    for (let i = 0; i < highestId; i++) {
+      clearTimeout(i);
+    }
   };
   
   // Handle simulation resume
   const handleResumeSimulation = () => {
     setSimulationStatus('running');
+    setIsPaused(false);
+    
+    // Resume GSAP animations
+    gsap.globalTimeline.resume();
   };
   
   // Handle simulation end
@@ -1380,12 +1446,28 @@ const RouterSimulator = () => {
   
   // Toggle connect mode
   const toggleConnectMode = () => {
-    setConnectMode(!connectMode);
-    setSelectedRouters([]);
-    setSelectionMode(false);
-    setSelectedElements({routers: [], links: []});
+    // If already in connect mode, cancel it by clearing selected routers
+    if (connectMode) {
+      setConnectMode(false);
+      setSelectedRouters([]);
+    } else {
+      // If turning on connect mode, turn off selection mode
+      setConnectMode(true);
+      setSelectionMode(false);
+      setSelectedElements({routers: [], links: []});
+    }
   };
-  
+
+  // Handle cancellation of link creation
+  const handleCancelLink = () => {
+    // Clear selected routers
+    setSelectedRouters([]);
+    // Close the modal
+    setShowLinkCostModal(false);
+    // Exit connect mode
+    setConnectMode(false);
+  };
+
   const toggleLeftPanel = () => {
     setLeftPanelVisible(!leftPanelVisible);
   };
@@ -1467,6 +1549,9 @@ const RouterSimulator = () => {
   
   // Handle next step button click
   const handleNextStep = () => {
+    // Don't process next step if paused or if animation is in progress
+    if (isPaused || animationInProgress) return;
+    
     // Advance the simulation by one step
     setCurrentStep(prev => prev + 1);
     
@@ -1478,6 +1563,9 @@ const RouterSimulator = () => {
     console.log("Current sequence numbers:", JSON.stringify(routerSequenceNumbers, null, 2));
     
     let animationsStarted = false; // Track if we started any animations in this step
+    
+    // Collect all animations to synchronize them
+    const animations = [];
     
     // PHASE 0: Check if we need to broadcast hello messages (every 15 steps)
     if (newStepNumber % 15 === 0) {
@@ -1512,38 +1600,51 @@ const RouterSimulator = () => {
       
       console.log(`Broadcasting hello messages for ${neighborRelationships.length} established connections`);
       
-      // For each established relationship, send hello packets in both directions
-      neighborRelationships.forEach((relationship, index) => {
+      // Group by source-target pairs for staggered delays within each pair
+      const groupedHellos = {};
+      
+      // For each established relationship, prepare hello packets in both directions
+      neighborRelationships.forEach((relationship) => {
         const [router1, router2] = relationship.split('-');
-        const baseDelay = 200; // shorter delay for hello broadcasts to avoid waiting too long
-        const staggeredDelay = index * baseDelay;
         
-        // Send hello from router1 to router2
-        setTimeout(() => {
-          animatePacket(
-            router1,
-            router2,
-            `Hello packet from ${router1} to ${router2}`,
-            'hello'
-          );
-        }, staggeredDelay);
+        // Create or get the group for this router pair
+        const pairKey1 = `${router1}-${router2}`;
+        if (!groupedHellos[pairKey1]) groupedHellos[pairKey1] = [];
         
-        // Send hello from router2 to router1 with a small additional delay
-        setTimeout(() => {
-          animatePacket(
-            router2,
-            router1,
-            `Hello packet from ${router2} to ${router1}`,
-            'hello'
-          );
-        }, staggeredDelay + 100);
+        // Add hello from router1 to router2
+        groupedHellos[pairKey1].push({
+          from: router1,
+          to: router2,
+          content: `Hello packet from ${router1} to ${router2}`,
+          type: 'hello'
+        });
         
-        console.log(`Scheduled hello packet exchange for ${router1} <-> ${router2} with delay ${staggeredDelay}ms`);
+        // Create or get the group for the reverse direction
+        const pairKey2 = `${router2}-${router1}`;
+        if (!groupedHellos[pairKey2]) groupedHellos[pairKey2] = [];
+        
+        // Add hello from router2 to router1
+        groupedHellos[pairKey2].push({
+          from: router2,
+          to: router1,
+          content: `Hello packet from ${router2} to ${router1}`,
+          type: 'hello'
+        });
+      });
+      
+      // Add all hello animations to the queue with appropriate delays within each group
+      Object.values(groupedHellos).forEach(group => {
+        group.forEach((packet, index) => {
+          animations.push({
+            ...packet,
+            groupDelay: index * 300 // 300ms stagger within each group
+          });
+        });
       });
       
       if (neighborRelationships.length > 0) {
         animationsStarted = true;
-        console.log(`Periodic hello packet broadcast initiated in step ${newStepNumber}`);
+        console.log(`Periodic hello packet broadcast prepared in step ${newStepNumber}`);
       }
     }
     
@@ -1557,45 +1658,32 @@ const RouterSimulator = () => {
       // Clear the pending queue immediately to prevent double-processing
       setPendingLSPForwards([]);
       
-      // Group forwards by source router to add staggered delays
-      const forwardsBySource = {};
+      // Group forwards by source-target pairs for staggered delays within each pair
+      const groupedForwards = {};
+      
       forwardsToProcess.forEach(forward => {
-        if (!forwardsBySource[forward.from]) {
-          forwardsBySource[forward.from] = [];
-        }
-        forwardsBySource[forward.from].push(forward);
+        const pairKey = `${forward.from}-${forward.to}`;
+        if (!groupedForwards[pairKey]) groupedForwards[pairKey] = [];
+        groupedForwards[pairKey].push(forward);
       });
       
-      // Process each group of forwards with staggered delays
-      Object.entries(forwardsBySource).forEach(([sourceRouter, forwards]) => {
-        // Calculate equal time intervals for packet animations from the same source
-        const totalForwardsFromSource = forwards.length;
-        const baseDelay = 500; // base delay for packet spacing
-        
-        // Process each forward with a staggered delay
+      // Add all LSP forward animations to the queue with staggered delays
+      Object.entries(groupedForwards).forEach(([pairKey, forwards]) => {
         forwards.forEach((forward, index) => {
-          const staggeredDelay = index * baseDelay;
-          
-          console.log(`Forwarding LSP-${forward.lspOwner}-${forward.sequenceNumber} from ${forward.from} to ${forward.to} with delay ${staggeredDelay}ms`);
-          
-          // Use setTimeout to stagger the animations
-          setTimeout(() => {
-            animatePacket(
-              forward.from,
-              forward.to,
-              forward.content,
-              'lsp',
-              1000,
-              null,
-              forward.lspOwner,
-              forward.sequenceNumber
-            );
-          }, staggeredDelay);
+          animations.push({
+            from: forward.from,
+            to: forward.to,
+            content: forward.content,
+            type: 'lsp',
+            lspOwner: forward.lspOwner,
+            sequenceNumber: forward.sequenceNumber,
+            groupDelay: index * 300 // 300ms stagger within each group
+          });
         });
       });
       
       animationsStarted = true;
-      console.log(`LSP Forwarding animations started in step ${newStepNumber}`);
+      console.log(`LSP Forwarding animations prepared in step ${newStepNumber}`);
     }
     
     // PHASE 2: Hello Packet Exchange for New Links
@@ -1620,9 +1708,12 @@ const RouterSimulator = () => {
     
     console.log("Established connections:", Array.from(establishedConnections));
     
+    // Group new hello packets by source-target pairs
+    const groupedNewHellos = {};
+    
     // Check for new links that haven't established hello packets yet
     let newLinksFound = false;
-    links.forEach((link, linkIndex) => {
+    links.forEach((link) => {
       const connectionKey = [link.source, link.target].sort().join('-');
       
       // If this link isn't in the established connections, it's a new link
@@ -1630,42 +1721,48 @@ const RouterSimulator = () => {
         console.log(`Detected new link: ${link.source} <-> ${link.target}`);
         newLinksFound = true;
         
-        // Base delay for staggering hello packets
-        const baseDelay = 500; // base delay for packet spacing
-        const linkDelay = linkIndex * baseDelay;
+        // Create group for source to target
+        const pairKey1 = `${link.source}-${link.target}`;
+        if (!groupedNewHellos[pairKey1]) groupedNewHellos[pairKey1] = [];
         
-        // Send hello packets in both directions with staggered delays
-        // From source to target
-        setTimeout(() => {
-          animatePacket(
-            link.source,
-            link.target,
-            `Hello packet from ${link.source} to ${link.target}`,
-            'hello'
-          );
-        }, linkDelay);
+        // Add hello from source to target
+        groupedNewHellos[pairKey1].push({
+          from: link.source,
+          to: link.target,
+          content: `Hello packet from ${link.source} to ${link.target}`,
+          type: 'hello'
+        });
         
-        // From target to source (add a small additional delay)
-        setTimeout(() => {
-          animatePacket(
-            link.target,
-            link.source,
-            `Hello packet from ${link.target} to ${link.source}`,
-            'hello'
-          );
-        }, linkDelay + 250); // additional delay for paired hello packets
+        // Create group for target to source
+        const pairKey2 = `${link.target}-${link.source}`;
+        if (!groupedNewHellos[pairKey2]) groupedNewHellos[pairKey2] = [];
         
-        console.log(`Initiated hello packet exchange for new link: ${link.source} <-> ${link.target} with delay ${linkDelay}ms`);
+        // Add hello from target to source
+        groupedNewHellos[pairKey2].push({
+          from: link.target,
+          to: link.source,
+          content: `Hello packet from ${link.target} to ${link.source}`,
+          type: 'hello'
+        });
       }
+    });
+    
+    // Add all new hello animations to the queue with staggered delays within each group
+    Object.values(groupedNewHellos).forEach(group => {
+      group.forEach((packet, index) => {
+        animations.push({
+          ...packet,
+          groupDelay: index * 300 // 300ms stagger within each group
+        });
+      });
     });
     
     if (newLinksFound) {
       animationsStarted = true;
-      console.log(`Hello packet exchange animations started in step ${newStepNumber}`);
+      console.log(`Hello packet exchange animations prepared in step ${newStepNumber}`);
     }
     
     // PHASE 3: LSP Flooding (Origination Only) - Always check this regardless of hello packets
-    // For each router that has neighbors, originate an LSP to all neighbors
     // First, make a copy of the current sequence numbers to update
     const updatedSequenceNumbers = { ...routerSequenceNumbers };
 
@@ -1709,16 +1806,33 @@ const RouterSimulator = () => {
           const neighborView = lsdbData[neighborId][routerId] || [];
           const currentView = routerData[routerId];
           
-          // Compare arrays
-          const isOutdated = neighborView.length !== currentView.length || 
-                             !neighborView.every(n => currentView.includes(n));
+          // Fix: Sort the arrays before comparison to ensure consistent comparison
+          const sortedNeighborView = [...neighborView].sort();
+          const sortedCurrentView = [...currentView].sort();
           
-          if (isOutdated) {
-            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} has outdated view: ${neighborView} vs ${currentView}`);
-            return true;
+          // Compare arrays using JSON.stringify for deep equality
+          const neighborViewStr = JSON.stringify(sortedNeighborView);
+          const currentViewStr = JSON.stringify(sortedCurrentView);
+          
+          // Check if the neighbor has an outdated view of this router's neighbors
+          const contentOutdated = neighborViewStr !== currentViewStr;
+          
+          // Also check if the neighbor has an outdated sequence number
+          const currentSeqNum = routerSequenceNumbers[routerId] || 0;
+          const neighborSeqNums = (lsdbData[neighborId].sequenceNumbers || {});
+          const neighborSeqNum = neighborSeqNums[routerId] || 0;
+          const seqNumOutdated = currentSeqNum > neighborSeqNum;
+          
+          // Log the sequence number comparison
+          if (seqNumOutdated) {
+            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} has outdated sequence number: ${neighborSeqNum} vs ${currentSeqNum}`);
           }
           
-          return false;
+          if (contentOutdated) {
+            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} has outdated view: ${neighborView} vs ${currentView}`);
+          }
+          
+          return contentOutdated || seqNumOutdated;
         });
         
         if (needsToFlood) {
@@ -1732,7 +1846,10 @@ const RouterSimulator = () => {
     
     console.log(`Routers needing to flood LSPs: ${Array.from(routersNeedingLSPFlood).join(', ') || 'None'}`);
     
-    // For each router that needs to flood, send LSPs to all its neighbors
+    // Group LSP origination packets by source-target pairs
+    const groupedLSPOriginations = {};
+    
+    // For each router that needs to flood, prepare LSPs to all its neighbors
     routersNeedingLSPFlood.forEach(routerId => {
       // Get the router's current neighbors
       const neighbors = lsdbData[routerId][routerId];
@@ -1748,31 +1865,32 @@ const RouterSimulator = () => {
       
       console.log(`Router ${routerId} flooding LSP with sequence ${seqNumber} to ${neighbors.length} neighbors:`, neighbors);
       
-      // Calculate equal time intervals for packet animations
-      const baseDelay = 500; // base delay for packet spacing
-      
-      // Send an LSP from this router to each of its neighbors with staggered delays
-      neighbors.forEach((neighborId, index) => {
-        const staggeredDelay = index * baseDelay;
+      // Prepare an LSP from this router to each of its neighbors
+      neighbors.forEach((neighborId) => {
+        const pairKey = `${routerId}-${neighborId}`;
+        if (!groupedLSPOriginations[pairKey]) groupedLSPOriginations[pairKey] = [];
         
-        console.log(`Sending LSP-${routerId}-${seqNumber} from ${routerId} to ${neighborId} with delay ${staggeredDelay}ms`);
-        
-        // Use setTimeout to stagger the animations
-        setTimeout(() => {
-          animatePacket(
-            routerId,
-            neighborId,
-            `LSP-${routerId}-${seqNumber}`,
-            'lsp',
-            1000,
-            null,
-            routerId,
-            seqNumber // Pass sequence number directly
-          );
-        }, staggeredDelay);
+        groupedLSPOriginations[pairKey].push({
+          from: routerId,
+          to: neighborId,
+          content: `LSP-${routerId}-${seqNumber}`,
+          type: 'lsp',
+          lspOwner: routerId,
+          sequenceNumber: seqNumber
+        });
       });
       
       animationsStarted = true;
+    });
+    
+    // Add all LSP origination animations to the queue with staggered delays within each group
+    Object.values(groupedLSPOriginations).forEach(group => {
+      group.forEach((packet, index) => {
+        animations.push({
+          ...packet,
+          groupDelay: index * 300 // 300ms stagger within each group
+        });
+      });
     });
     
     // Update sequence numbers in state if any were changed
@@ -1781,6 +1899,41 @@ const RouterSimulator = () => {
       setRouterSequenceNumbers(updatedSequenceNumbers);
     } else {
       console.log("No sequence numbers were updated");
+    }
+    
+    // Execute all animations synchronously with their group delays
+    if (animations.length > 0) {
+      // Set animation in progress to prevent new steps
+      setAnimationInProgress(true);
+      
+      // Count how many animations we're waiting for
+      let pendingAnimations = animations.length;
+      const animationCompletionCallback = () => {
+        pendingAnimations--;
+        if (pendingAnimations <= 0) {
+          // All animations are complete
+          setAnimationInProgress(false);
+        }
+      };
+      
+      // Start all animations simultaneously (respecting their group delays)
+      animations.forEach(animation => {
+        setTimeout(() => {
+          animatePacket(
+            animation.from,
+            animation.to,
+            animation.content,
+            animation.type,
+            1000, // same duration for all packets
+            animationCompletionCallback,
+            animation.lspOwner,
+            animation.sequenceNumber
+          );
+        }, animation.groupDelay || 0);
+      });
+      
+      animationsStarted = true;
+      console.log(`Started ${animations.length} synchronized animations in step ${newStepNumber}`);
     }
     
     // If no animations were started in this step, check if simulation is complete
@@ -1883,6 +2036,7 @@ const RouterSimulator = () => {
               className="router-template"
               draggable
               onDragEnd={handleRouterDrop}
+              style={{ pointerEvents: 'auto' }}
             >
               Drag to add Router
             </div>
@@ -1913,7 +2067,7 @@ const RouterSimulator = () => {
             <button 
               onClick={handleSendCustomPacket}
               className="custom-button"
-              disabled={simulationStatus !== 'running' && simulationStatus !== 'paused'}
+              disabled={simulationStatus !== 'running' && simulationStatus !== 'paused' || isPaused}
             >
               Send Custom Packet
             </button>
@@ -1935,7 +2089,7 @@ const RouterSimulator = () => {
               onLinkClick={handleLinkClick}
               selectedRouters={selectedRouters}
               selectedElements={selectedElements}
-              disabled={simulationStatus === 'running'}
+              disabled={simulationStatus === 'running' && !isPaused}
               connectMode={connectMode}
               selectionMode={selectionMode}
               simulationStatus={simulationStatus}
@@ -1963,7 +2117,7 @@ const RouterSimulator = () => {
             {leftPanelVisible ? '◄' : '►'}
           </button>
           
-          {/* Right panel with controls */}
+          {/* Control Panel with disabled state for pause */}
           <div className={`right-panel ${!rightPanelVisible ? 'collapsed' : ''}`}>
             <ControlPanel 
               onStartSimulation={handleStartSimulation}
@@ -1979,6 +2133,8 @@ const RouterSimulator = () => {
               speed={animationSpeed}
               disabled={routers.length < 2 || links.length === 0}
               currentStep={currentStep}
+              isPaused={isPaused}
+              animationInProgress={animationInProgress}
             />
           </div>
           
@@ -1995,11 +2151,7 @@ const RouterSimulator = () => {
         {/* Link cost modal overlay */}
         {showLinkCostModal && (
           <LinkCostModal 
-            onClose={() => {
-              setShowLinkCostModal(false);
-              setSelectedRouters([]);
-              setConnectMode(false);
-            }}
+            onClose={handleCancelLink}
             onAddLink={handleAddLink}
           />
         )}

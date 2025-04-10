@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const LinkCostModal = ({ onAddLink, onCancel }) => {
+const LinkCostModal = ({ onAddLink, onClose }) => {
   const [cost, setCost] = useState(1);
   
   const handleSubmit = (e) => {
@@ -9,7 +9,7 @@ const LinkCostModal = ({ onAddLink, onCancel }) => {
   };
   
   return (
-    <div className="modal-overlay" onClick={onCancel}>
+    <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <h3>Set Link Cost</h3>
         <form onSubmit={handleSubmit}>
@@ -27,7 +27,7 @@ const LinkCostModal = ({ onAddLink, onCancel }) => {
           
           <div className="modal-actions">
             <button type="submit">Add Link</button>
-            <button type="button" onClick={onCancel}>Cancel</button>
+            <button type="button" onClick={onClose}>Cancel</button>
           </div>
         </form>
       </div>

@@ -9,6 +9,31 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [glowEffect, setGlowEffect] = useState(null); // 'accept', 'reject', or 'receive'
+  
+  // Function to make router glow with appropriate color
+  const glow = (effect) => {
+    // Set glow effect state based on the type of effect
+    setGlowEffect(effect);
+    
+    // Clear glow effect after 200ms
+    setTimeout(() => {
+      setGlowEffect(null);
+    }, 200);
+  };
+  
+  // Expose the glow function via ref
+  useEffect(() => {
+    // Create a global reference to this router by ID for the animation effects
+    window[`router3D_${id}`] = {
+      glow: glow
+    };
+    
+    // Cleanup function
+    return () => {
+      delete window[`router3D_${id}`];
+    };
+  }, [id]);
   
   // Use a simple sphere for the router model
   useEffect(() => {
@@ -22,6 +47,40 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
       }
     }
   }, [isSelected, hovered]);
+  
+  // Update glow effect
+  useEffect(() => {
+    if (!meshRef.current) return;
+    
+    if (glowEffect) {
+      // Create glow effect based on type
+      switch(glowEffect) {
+        case 'accept':
+          // Green glow for acceptance
+          meshRef.current.material.emissive.set('#2ecc71');
+          meshRef.current.material.emissiveIntensity = 2.0;
+          break;
+        case 'reject':
+          // Red glow for rejection
+          meshRef.current.material.emissive.set('#e74c3c');
+          meshRef.current.material.emissiveIntensity = 2.0;
+          break;
+        case 'receive':
+          // Blue glow for packet reception
+          meshRef.current.material.emissive.set('#3498db');
+          meshRef.current.material.emissiveIntensity = 2.0;
+          break;
+        default:
+          // Reset glow effect
+          meshRef.current.material.emissive.set('#204060');
+          meshRef.current.material.emissiveIntensity = 0.3;
+      }
+    } else {
+      // Reset glow effect
+      meshRef.current.material.emissive.set('#204060');
+      meshRef.current.material.emissiveIntensity = 0.3;
+    }
+  }, [glowEffect]);
   
   // Get Three.js context
   const { camera, raycaster, mouse, gl } = useThree();
@@ -106,7 +165,7 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
   // Handle all pointer interactions
   const handlePointerDown = (e) => {
     // If disabled and not in selection mode, do nothing
-    if (disabled && !selectionMode) return;
+    if (disabled && !selectionMode && !connectMode) return;
     
     // In connect mode, just register click
     if (connectMode) {
@@ -394,8 +453,10 @@ const CameraController = ({ disabled, selectionMode, simulationRunning }) => {
       controls.current.enablePan = false;
       controls.current.enableZoom = true;
     } else {
-      controls.current.enableRotate = shouldEnableControls;
-      controls.current.enablePan = shouldEnableControls;
+      // Always enable rotation and pan when not in selection mode
+      // This allows panning in 3D space when paused
+      controls.current.enableRotate = true;
+      controls.current.enablePan = true;
       controls.current.enableZoom = true;
     }
     
@@ -417,8 +478,8 @@ const CameraController = ({ disabled, selectionMode, simulationRunning }) => {
     <OrbitControls
       ref={controls}
       args={[camera, gl.domElement]}
-      enableRotate={(!disabled || simulationRunning) && !selectionMode}
-      enablePan={(!disabled || simulationRunning) && !selectionMode}
+      enableRotate={!selectionMode}
+      enablePan={!selectionMode}
       enableZoom={true}
       minDistance={2}
       maxDistance={100}
@@ -532,12 +593,14 @@ const ThreeScene = ({
     
     if (selectionMode) {
       canvas.style.cursor = 'pointer';
+    } else if (connectMode) {
+      canvas.style.cursor = 'crosshair';
     } else if (disabled && !simulationRunning) {
       canvas.style.cursor = 'default';
     } else {
       canvas.style.cursor = 'grab';
     }
-  }, [selectionMode, disabled, simulationRunning]);
+  }, [selectionMode, connectMode, disabled, simulationRunning]);
   
   return (
     <div 
@@ -588,7 +651,7 @@ const ThreeScene = ({
             }
             onClick={handleRouterClick}
             onDrag={handleRouterDrag}
-            disabled={disabled && !simulationRunning}
+            disabled={disabled && !simulationRunning && !selectionMode && !connectMode}
             connectMode={connectMode}
             selectionMode={selectionMode}
           />
@@ -622,6 +685,25 @@ const ThreeScene = ({
           fontWeight: 'bold'
         }}>
           Selection Mode: {selectedElements.routers.length > 0 ? 'Drag to Reposition' : 'Click to Select'}
+        </div>
+      )}
+      
+      {/* Connect mode indicator overlay */}
+      {connectMode && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          backgroundColor: 'rgba(52, 152, 219, 0.8)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          pointerEvents: 'none',
+          zIndex: 100,
+          boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+          fontWeight: 'bold'
+        }}>
+          Connect Mode: {selectedRouters.length === 0 ? 'Select First Router' : 'Select Second Router'}
         </div>
       )}
     </div>
