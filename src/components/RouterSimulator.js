@@ -785,14 +785,15 @@ const RouterSimulator = () => {
     // Create a GSAP animation to update the packet position
     gsap.to({}, {
       duration: durationInSeconds,
-      ease: "power2.inOut", // Smoother animation
+      ease: "power3.out", // Changed to a more fluid easing
+      overwrite: "auto", // Prevents animation conflicts
       onUpdate: function() {
         // Calculate current position based on progress
         const progress = this.progress();
         const currentX = fromX + (toX - fromX) * progress;
         const currentY = fromY + (toY - fromY) * progress;
         
-        // Update packet position in state
+        // Use functional state update to avoid conflicts
         setPackets(prevPackets => 
           prevPackets.map(p => 
             p.id === packetId 
@@ -801,6 +802,7 @@ const RouterSimulator = () => {
           )
         );
       },
+      clearProps: "all", // Clean up properties after animation completes
       onComplete: () => {
         // Find the packet data before removing it
         const currentPackets = [...packets]; // Get a snapshot of current packets
