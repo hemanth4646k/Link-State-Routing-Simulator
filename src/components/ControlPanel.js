@@ -8,6 +8,8 @@ const ControlPanel = ({
   onResetSimulation,
   onSpeedChange,
   onSendCustomPacket,
+  onNextStep,
+  onEditTopology,
   simulationStatus,
   speed,
   disabled,
@@ -52,6 +54,18 @@ const ControlPanel = ({
           {isPaused && (
             <button onClick={onResumeSimulation} className="control-button">
               Resume
+            </button>
+          )}
+          
+          {(isRunning || isPaused) && (
+            <button onClick={onNextStep} className="control-button">
+              Next Step
+            </button>
+          )}
+          
+          {(isRunning || isPaused) && (
+            <button onClick={onEditTopology} className="control-button">
+              Edit Topology
             </button>
           )}
           
@@ -117,6 +131,8 @@ const ControlPanel = ({
             <li>Click "Connect Routers" to add links</li>
             <li>Use "Selection Mode" to delete elements</li>
             <li>Start simulation to see routing in action</li>
+            <li>Use "Next Step" to advance the simulation one step</li>
+            <li>Use "Edit Topology" to modify the network during simulation</li>
           </ul>
         </div>
       </div>

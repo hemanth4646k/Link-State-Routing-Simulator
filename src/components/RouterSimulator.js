@@ -32,6 +32,8 @@ const RouterSimulator = () => {
   const [currentStep, setCurrentStep] = useState(0); // Track current simulation step
   const [processedLSPs, setProcessedLSPs] = useState({}); // Track which LSPs each router has processed
   const [simulationLogs, setSimulationLogs] = useState([]); // Store logs from flooding.js
+  const [routerSequenceNumbers, setRouterSequenceNumbers] = useState({}); // Track sequence numbers for each router's LSPs
+  const [pendingLSPForwards, setPendingLSPForwards] = useState([]); // Queue of LSPs to be forwarded in the next step
   
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
@@ -230,6 +232,7 @@ const RouterSimulator = () => {
     setLsdbData({});
     setRoutingTables({});
     setProcessedLSPs({});
+    setRouterSequenceNumbers({}); // Reset sequence numbers
     
     // Start with empty LSDBs for each router
     const initialLSDB = {};
@@ -261,6 +264,39 @@ const RouterSimulator = () => {
         setSimulationLogs(logs);
       }
     );
+    
+    // Broadcast hello messages from both sides of all edges
+    // Use setTimeout to ensure this happens after the simulation is initialized
+    setTimeout(() => {
+      console.log(`Initiating hello packet exchange for ${links.length} links (${links.length * 2} hello packets total)`);
+      
+      // Broadcast hello packets for all links
+      links.forEach(link => {
+        // Send hello from source to target
+        animatePacket(
+          link.source,
+          link.target,
+          `Hello packet from ${link.source} to ${link.target}`,
+          'hello',
+          1000,  // animation duration
+          null,  // callback
+          null,  // owner (not needed for hello)
+          null   // sequence (not needed for hello)
+        );
+        
+        // Send hello from target to source
+        animatePacket(
+          link.target,
+          link.source,
+          `Hello packet from ${link.target} to ${link.source}`,
+          'hello',
+          1000,  // animation duration
+          null,  // callback
+          null,  // owner (not needed for hello)
+          null   // sequence (not needed for hello)
+        );
+      });
+    }, 500); // Short delay to ensure simulation is fully initialized
   };
   
   // Handle a step in the animation
@@ -317,7 +353,7 @@ const RouterSimulator = () => {
   };
   
   // Animate a packet moving from source to target
-  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null, lspOwner = null) => {
+  const animatePacket = (fromId, toId, packetData, packetType = 'lsp', animationDuration = 1000, externalCallback = null, lspOwner = null, sequenceNumber = null) => {
     const fromRouter = routers.find(r => r.id === fromId);
     const toRouter = routers.find(r => r.id === toId);
     
@@ -345,7 +381,7 @@ const RouterSimulator = () => {
     // 2. The new format: "LSP-A-2"
     let nodeId = null;
     let adjList = [];
-    let seqNumber = null;
+    let extractedSeqNumber = null;
     
     if (packetType === 'lsp' && typeof packetData === 'string') {
       // Try to match the new format first: "LSP-A-2"
@@ -353,7 +389,7 @@ const RouterSimulator = () => {
       if (newFormatMatch) {
         // Use the explicit LSP owner if provided, otherwise use from the packet data
         nodeId = lspOwner || newFormatMatch[1];
-        seqNumber = parseInt(newFormatMatch[2]);
+        extractedSeqNumber = parseInt(newFormatMatch[2]);
         
         // For new format, get the ACTUAL established neighbors from LSDB
         // A neighbor is only established if BOTH routers know about each other
@@ -379,6 +415,16 @@ const RouterSimulator = () => {
       }
     }
     
+    // Use the sequence number provided as parameter if available
+    const finalSequenceNumber = sequenceNumber || extractedSeqNumber;
+    
+    // Store additional metadata for the packet
+    const metadata = {
+      lspOwner: lspOwner,
+      sequenceNumber: finalSequenceNumber,
+      sourceRouter: fromId
+    };
+    
     const newPacket = {
       id: packetId,
       from: fromId,
@@ -387,7 +433,8 @@ const RouterSimulator = () => {
       type: packetType,
       x: fromX,
       y: fromY,
-      size: packetSize
+      size: packetSize,
+      metadata: metadata // Store the metadata for easy access
     };
     
     // Add packet to state
@@ -430,6 +477,10 @@ const RouterSimulator = () => {
         );
       },
       onComplete: () => {
+        // Find the packet data before removing it
+        const currentPackets = [...packets]; // Get a snapshot of current packets
+        const packet = currentPackets.find(p => p.id === packetId);
+        
         // Remove packet when animation completes
         setPackets(prev => prev.filter(p => p.id !== packetId));
         
@@ -438,7 +489,10 @@ const RouterSimulator = () => {
           if (nodeId && adjList) {
             // Create the data for LSDB update with the router adjList
             const updateData = [nodeId, adjList];
-            updateLSDB(toId, updateData);
+            
+            // Pass the source router and sequence number to the update function
+            const packetMetadata = packet ? packet.metadata : metadata;
+            updateLSDB(toId, updateData, packetMetadata);
             highlightChange(toId, updateData);
           }
         } else if (packetType === 'hello') {
@@ -508,7 +562,7 @@ const RouterSimulator = () => {
   };
   
   // Update a router's LSDB with new data
-  const updateLSDB = (routerId, data) => {
+  const updateLSDB = (routerId, data, packetMetadata = null) => {
     if (!data || !Array.isArray(data) || data.length < 2) {
       return;
     }
@@ -519,10 +573,87 @@ const RouterSimulator = () => {
       return;
     }
     
+    // Get sequence information directly from the packet metadata
+    console.log(`Router ${routerId} received data:`, data);
+    console.log(`Packet metadata:`, packetMetadata);
+    
+    // Extract sequence number information from packet metadata if available
+    let seqNumber = null;
+    let lspOwner = nodeId;
+    let sourceRouter = null;
+    
+    if (packetMetadata) {
+      lspOwner = packetMetadata.lspOwner || nodeId;
+      seqNumber = packetMetadata.sequenceNumber;
+      sourceRouter = packetMetadata.sourceRouter;
+      
+      if (seqNumber !== null) {
+        console.log(`Router ${routerId} received LSP from ${lspOwner} with sequence number ${seqNumber} via ${sourceRouter}`);
+      }
+    } else {
+      console.log(`Router ${routerId} received data without metadata`);
+      
+      // Try extracting sequence from packet data for backward compatibility
+      const seqMatch = Array.from(packets)
+        .filter(p => p.to === routerId && p.type === 'lsp')
+        .sort((a, b) => b.id.localeCompare(a.id))[0]; // Sort by ID in descending order
+      
+      if (seqMatch && seqMatch.data) {
+        const match = seqMatch.data.match(/LSP-([A-Z])-(\d+)/);
+        if (match) {
+          lspOwner = match[1];
+          seqNumber = parseInt(match[2]);
+          sourceRouter = seqMatch.from;
+          console.log(`Router ${routerId} extracted sequence from packet: LSP from ${lspOwner} with seq ${seqNumber}`);
+        }
+      }
+    }
+    
     // Create a unique key for this LSP
     const lspKey = `LSP${nodeId}: ${JSON.stringify(adjList)}`;
     
-    // Check if this router has already processed this LSP
+    // Check FIRST if this router has already processed this EXACT LSP
+    // This prevents multiple processing of identical LSPs
+    const alreadyProcessed = processedLSPs[routerId] && processedLSPs[routerId].has(lspKey);
+    console.log(`Router ${routerId} processing LSP ${lspKey} - Already processed: ${alreadyProcessed}`);
+    
+    // If router has already processed this exact LSP, skip the update
+    if (alreadyProcessed) {
+      console.log(`Router ${routerId} skipping already processed LSP: ${lspKey}`);
+      return;
+    }
+    
+    // Next check the sequence number BEFORE updating any state
+    let shouldForward = false;
+    let shouldUpdateLSDB = false;
+    
+    // Make a copy of LSDB for sequence number checking
+    const currentLSDB = JSON.parse(JSON.stringify(lsdbData));
+    
+    // Check if we need to update based on sequence number
+    if (seqNumber !== null) {
+      // Get current sequence number, if any
+      const currentSeqNumbers = (currentLSDB[routerId] && currentLSDB[routerId].sequenceNumbers) || {};
+      const currentSeq = currentSeqNumbers[lspOwner] || 0;
+      
+      console.log(`Router ${routerId} comparing sequence numbers for ${lspOwner}: new=${seqNumber}, current=${currentSeq}`);
+      
+      // If the incoming sequence number is greater, we should update and forward
+      if (seqNumber > currentSeq) {
+        console.log(`Router ${routerId} will process and forward LSP from ${lspOwner} with sequence ${seqNumber} (current: ${currentSeq})`);
+        shouldForward = true;
+        shouldUpdateLSDB = true;
+      } else {
+        console.log(`Router ${routerId} discarded LSP from ${lspOwner} with sequence ${seqNumber} (already has ${currentSeq})`);
+        return; // Skip processing entirely
+      }
+    } else {
+      // If no sequence number, we'll still update LSDB but not forward
+      console.log(`Router ${routerId} received LSP without sequence number, will update LSDB but not forward`);
+      shouldUpdateLSDB = true;
+    }
+    
+    // Now update processed LSPs to mark this LSP as processed
     setProcessedLSPs(prev => {
       const updated = { ...prev };
       
@@ -531,15 +662,14 @@ const RouterSimulator = () => {
         updated[routerId] = new Set();
       }
       
-      // If router has already processed this LSP, skip the update
-      if (updated[routerId].has(lspKey)) {
-        return updated;
-      }
-      
-      // Otherwise mark it as processed
+      // Mark it as processed
       updated[routerId].add(lspKey);
       
-      // And update the LSDB
+      return updated;
+    });
+    
+    // Update the LSDB if needed
+    if (shouldUpdateLSDB) {
       setLsdbData(lsdbPrev => {
         // Make a deep copy of the previous state
         const lsdbUpdated = JSON.parse(JSON.stringify(lsdbPrev));
@@ -549,8 +679,57 @@ const RouterSimulator = () => {
           lsdbUpdated[routerId] = {};
         }
         
-        // Update with the new adjacency list
+        // Update the adjacency list
         lsdbUpdated[routerId][nodeId] = adjList;
+        console.log(`Router ${routerId} updated LSDB with ${nodeId}'s adjacency list:`, adjList);
+        
+        // Now that we've updated the LSDB, update the sequence number
+        if (seqNumber !== null) {
+          // Initialize sequence number tracking if needed
+          if (!lsdbUpdated[routerId].sequenceNumbers) {
+            lsdbUpdated[routerId].sequenceNumbers = {};
+          }
+          
+          // Update to the new sequence number
+          lsdbUpdated[routerId].sequenceNumbers[lspOwner] = seqNumber;
+          console.log(`Router ${routerId} updated sequence number for ${lspOwner} to ${seqNumber}`);
+        }
+        
+        // Instead of forwarding LSPs immediately, queue them for the next step
+        if (shouldForward && seqNumber !== null) {
+          // Find potential forwarding targets
+          if (lsdbUpdated[routerId][routerId]) {
+            const neighbors = lsdbUpdated[routerId][routerId];
+            
+            console.log(`Router ${routerId} neighbors:`, neighbors);
+            console.log(`Router ${routerId} received LSP from:`, sourceRouter);
+            
+            // Find all neighbors except the one that sent us this LSP
+            const forwardingTargets = neighbors.filter(neighborId => neighborId !== sourceRouter);
+            
+            console.log(`Router ${routerId} potential forwarding targets:`, forwardingTargets);
+            
+            if (forwardingTargets.length > 0) {
+              console.log(`Router ${routerId} queueing LSP-${lspOwner}-${seqNumber} to be forwarded to ${forwardingTargets.length} neighbors in next step`);
+              
+              // Queue forwards for the next step instead of sending immediately
+              setPendingLSPForwards(prev => [
+                ...prev,
+                ...forwardingTargets.map(targetId => ({
+                  from: routerId,
+                  to: targetId,
+                  lspOwner: lspOwner,
+                  sequenceNumber: seqNumber,
+                  content: `LSP-${lspOwner}-${seqNumber}`
+                }))
+              ]);
+            } else {
+              console.log(`Router ${routerId} has no other neighbors to forward the LSP to`);
+            }
+          } else {
+            console.log(`Router ${routerId} doesn't know its own neighbors yet, can't forward LSP`);
+          }
+        }
         
         // Update routing tables immediately to reflect the new LSDB information
         // This ensures the left panel shows updated information after each packet
@@ -591,9 +770,7 @@ const RouterSimulator = () => {
         
         return lsdbUpdated;
       });
-      
-      return updated;
-    });
+    }
   };
   
   // Highlight a change in the LSDB
@@ -946,9 +1123,260 @@ const RouterSimulator = () => {
         'lsp',
         1000,
         null,
-        packetData.lspOwner  // Pass the LSP owner explicitly
+        packetData.lspOwner,  // Pass the LSP owner explicitly
+        packetData.sequenceNumber // Pass the sequence number explicitly
       );
     }
+  };
+  
+  // Handle next step button click
+  const handleNextStep = () => {
+    // Advance the simulation by one step
+    setCurrentStep(prev => prev + 1);
+    
+    console.log(`\n----- STARTING NEXT STEP: ${currentStep + 1} -----`);
+    
+    // Print current LSDB state for debugging
+    console.log("Current LSDB state:", JSON.stringify(lsdbData, null, 2));
+    console.log("Current sequence numbers:", JSON.stringify(routerSequenceNumbers, null, 2));
+    
+    // PHASE 0: Process any pending LSP forwards from the previous step
+    if (pendingLSPForwards.length > 0) {
+      console.log(`Processing ${pendingLSPForwards.length} pending LSP forwards from previous step`);
+      
+      // Create a copy to process
+      const forwardsToProcess = [...pendingLSPForwards];
+      
+      // Clear the pending queue immediately to prevent double-processing
+      setPendingLSPForwards([]);
+      
+      // Process each forward
+      forwardsToProcess.forEach(forward => {
+        console.log(`Forwarding LSP-${forward.lspOwner}-${forward.sequenceNumber} from ${forward.from} to ${forward.to}`);
+        animatePacket(
+          forward.from,
+          forward.to,
+          forward.content,
+          'lsp',
+          1000,
+          null,
+          forward.lspOwner,
+          forward.sequenceNumber
+        );
+      });
+      
+      // After processing LSP forwards, we're done for this step
+      console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (LSP Forwarding Phase) -----\n`);
+      return;
+    }
+    
+    // PHASE 1: Hello Packet Exchange for New Links
+    // Track previously established connections to identify new links
+    const establishedConnections = new Set();
+    
+    // For each router in the LSDB, check its neighbors
+    Object.entries(lsdbData).forEach(([routerId, routerData]) => {
+      // Check if the router has data about itself (its neighbor list)
+      if (routerData[routerId]) {
+        console.log(`Router ${routerId} knows about these neighbors:`, routerData[routerId]);
+        // For each neighbor this router knows about
+        routerData[routerId].forEach(neighborId => {
+          // Create a unique identifier for this connection (sorted for consistency)
+          const connectionKey = [routerId, neighborId].sort().join('-');
+          establishedConnections.add(connectionKey);
+        });
+      } else {
+        console.log(`Router ${routerId} doesn't know its own neighbors yet`);
+      }
+    });
+    
+    console.log("Established connections:", Array.from(establishedConnections));
+    
+    // Check for new links that haven't established hello packets yet
+    let newLinksFound = false;
+    links.forEach(link => {
+      const connectionKey = [link.source, link.target].sort().join('-');
+      
+      // If this link isn't in the established connections, it's a new link
+      if (!establishedConnections.has(connectionKey)) {
+        console.log(`Detected new link: ${link.source} <-> ${link.target}`);
+        newLinksFound = true;
+        
+        // Send hello packets in both directions
+        // From source to target
+        animatePacket(
+          link.source,
+          link.target,
+          `Hello packet from ${link.source} to ${link.target}`,
+          'hello'
+        );
+        
+        // From target to source
+        animatePacket(
+          link.target,
+          link.source,
+          `Hello packet from ${link.target} to ${link.source}`,
+          'hello'
+        );
+        
+        console.log(`Initiated hello packet exchange for new link: ${link.source} <-> ${link.target}`);
+      }
+    });
+    
+    // If we found new links and sent hello packets, don't move to LSP phase yet
+    // Let the hello packets establish the neighbor relationships first
+    if (newLinksFound) {
+      console.log("New links found - exchanging hello packets. LSP flooding will happen in the next step.");
+      console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (Hello Exchange Phase) -----\n`);
+      return;
+    }
+    
+    // PHASE 2: LSP Flooding (Origination Only)
+    // For each router that has neighbors, originate an LSP to all neighbors
+    // First, make a copy of the current sequence numbers to update
+    const updatedSequenceNumbers = { ...routerSequenceNumbers };
+
+    // Get routers with updated topology (those that have neighbors)
+    const routersNeedingLSPFlood = new Set();
+    
+    // Check for LSPs that need to be originated
+    console.log("Checking which routers need to originate new LSPs:");
+    
+    // Check each router to see if it has neighbors but hasn't flooded an LSP
+    // or if its topology has changed since the last LSP flooding
+    Object.entries(lsdbData).forEach(([routerId, routerData]) => {
+      // Skip if router doesn't know about itself yet (no neighbors)
+      if (!routerData[routerId]) {
+        console.log(`Router ${routerId} doesn't know its own neighbors yet, can't flood LSP`);
+        return;
+      }
+      
+      const currentNeighbors = routerData[routerId];
+      console.log(`Router ${routerId} has neighbors:`, currentNeighbors);
+      
+      // If this router has neighbors, it should send an LSP
+      if (currentNeighbors.length > 0) {
+        // Check if any neighbor doesn't have this router's LSP
+        // or if the topology has changed since the last LSP
+        const needsToFlood = currentNeighbors.some(neighborId => {
+          // If the neighbor doesn't exist in LSDB yet, it needs LSP
+          if (!lsdbData[neighborId]) {
+            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} doesn't exist in LSDB yet`);
+            return true;
+          }
+          
+          // If the neighbor doesn't know about this router's LSP, it needs one
+          if (!lsdbData[neighborId][routerId]) {
+            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} doesn't know about its LSP`);
+            return true;
+          }
+          
+          // Check if neighbor has outdated neighbor information
+          // Requires deep comparison of neighbor lists
+          const neighborView = lsdbData[neighborId][routerId] || [];
+          const currentView = routerData[routerId];
+          
+          // Compare arrays
+          const isOutdated = neighborView.length !== currentView.length || 
+                             !neighborView.every(n => currentView.includes(n));
+          
+          if (isOutdated) {
+            console.log(`Router ${routerId} needs to flood because neighbor ${neighborId} has outdated view: ${neighborView} vs ${currentView}`);
+            return true;
+          }
+          
+          return false;
+        });
+        
+        if (needsToFlood) {
+          routersNeedingLSPFlood.add(routerId);
+          console.log(`Router ${routerId} needs to flood LSP to its neighbors`);
+        } else {
+          console.log(`Router ${routerId} doesn't need to flood LSP (neighbors have current info)`);
+        }
+      }
+    });
+    
+    console.log(`Routers needing to flood LSPs: ${Array.from(routersNeedingLSPFlood).join(', ') || 'None'}`);
+    
+    // For each router that needs to flood, send LSPs to all its neighbors
+    routersNeedingLSPFlood.forEach(routerId => {
+      // Get the router's current neighbors
+      const neighbors = lsdbData[routerId][routerId];
+      
+      // Increment sequence number (or initialize to 1 if not yet set)
+      if (!updatedSequenceNumbers[routerId]) {
+        updatedSequenceNumbers[routerId] = 1;
+      } else {
+        updatedSequenceNumbers[routerId]++;
+      }
+      
+      const seqNumber = updatedSequenceNumbers[routerId];
+      
+      console.log(`Router ${routerId} flooding LSP with sequence ${seqNumber} to ${neighbors.length} neighbors:`, neighbors);
+      
+      // Send an LSP from this router to each of its neighbors
+      neighbors.forEach(neighborId => {
+        console.log(`Sending LSP-${routerId}-${seqNumber} from ${routerId} to ${neighborId}`);
+        animatePacket(
+          routerId,
+          neighborId,
+          `LSP-${routerId}-${seqNumber}`,
+          'lsp',
+          1000,
+          null,
+          routerId,
+          seqNumber // Pass sequence number directly
+        );
+      });
+    });
+    
+    // Update sequence numbers in state if any were changed
+    if (JSON.stringify(updatedSequenceNumbers) !== JSON.stringify(routerSequenceNumbers)) {
+      console.log("Updating sequence numbers:", updatedSequenceNumbers);
+      setRouterSequenceNumbers(updatedSequenceNumbers);
+    } else {
+      console.log("No sequence numbers were updated");
+    }
+    
+    // If no routers need to flood LSPs, we should check if we need to calculate final routing tables
+    if (routersNeedingLSPFlood.size === 0 && pendingLSPForwards.length === 0) {
+      console.log("No routers need to flood LSPs and no pending forwards. Link-state database may be stable.");
+      
+      // Check if all routers have complete routing tables
+      const allRoutersHaveTables = routers.every(router => {
+        // Skip check if routing tables aren't initialized yet
+        if (!routingTables[router.id]) return false;
+        
+        // Count routes to other routers (excluding self)
+        const routes = Object.keys(routingTables[router.id]).filter(k => k !== 'self');
+        // A router should have routes to all other routers in a connected network
+        return routes.length === routers.length - 1;
+      });
+      
+      if (allRoutersHaveTables) {
+        console.log("All routers have complete routing tables. Simulation can be finished.");
+      } else {
+        console.log("Routing tables are not yet complete. Continue simulation.");
+      }
+    }
+    
+    console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (LSP Origination Phase) -----\n`);
+  };
+  
+  // Handle edit topology button click
+  const handleEditTopology = () => {
+    // Pause the simulation if it's running
+    if (simulationStatus === 'running') {
+      handlePauseSimulation();
+    }
+    
+    // You could show a message or enable specific UI elements here
+    console.log("Entering topology edit mode");
+    
+    // Toggle the ability to modify the network while simulation is paused
+    // This is a placeholder - implement the actual topology editing mode based on your app's needs
+    // You might want to set a special state variable like setTopologyEditMode(true)
   };
   
   return (
@@ -1056,6 +1484,9 @@ const RouterSimulator = () => {
               onEndSimulation={handleEndSimulation}
               onResetSimulation={handleResetSimulation}
               onSpeedChange={handleSpeedChange}
+              onSendCustomPacket={handleSendCustomPacket}
+              onNextStep={handleNextStep}
+              onEditTopology={handleEditTopology}
               simulationStatus={simulationStatus}
               speed={animationSpeed}
               disabled={routers.length < 2 || links.length === 0}
