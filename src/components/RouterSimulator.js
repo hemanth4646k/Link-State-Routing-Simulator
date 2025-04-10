@@ -1156,13 +1156,74 @@ const RouterSimulator = () => {
     // Advance the simulation by one step
     setCurrentStep(prev => prev + 1);
     
-    console.log(`\n----- STARTING NEXT STEP: ${currentStep + 1} -----`);
+    const newStepNumber = currentStep + 1;
+    console.log(`\n----- STARTING NEXT STEP: ${newStepNumber} -----`);
     
     // Print current LSDB state for debugging
     console.log("Current LSDB state:", JSON.stringify(lsdbData, null, 2));
     console.log("Current sequence numbers:", JSON.stringify(routerSequenceNumbers, null, 2));
     
-    // PHASE 0: Process any pending LSP forwards from the previous step
+    let animationsStarted = false; // Track if we started any animations in this step
+    
+    // PHASE 0: Check if we need to broadcast hello messages (every 15 steps)
+    if (newStepNumber % 15 === 0) {
+      console.log(`Step ${newStepNumber} is a multiple of 15 - broadcasting hello messages from all routers`);
+      
+      // Get all established neighbor relationships from the LSDB
+      const neighborRelationships = [];
+      
+      Object.entries(lsdbData).forEach(([routerId, routerData]) => {
+        // Check if the router knows its own neighbors
+        if (routerData[routerId]) {
+          // For each neighbor this router knows about
+          routerData[routerId].forEach(neighborId => {
+            // Create a unique relationship identifier
+            const relationship = [routerId, neighborId].sort().join('-');
+            if (!neighborRelationships.includes(relationship)) {
+              neighborRelationships.push(relationship);
+            }
+          });
+        }
+      });
+      
+      console.log(`Broadcasting hello messages for ${neighborRelationships.length} established connections`);
+      
+      // For each established relationship, send hello packets in both directions
+      neighborRelationships.forEach((relationship, index) => {
+        const [router1, router2] = relationship.split('-');
+        const baseDelay = 200; // shorter delay for hello broadcasts to avoid waiting too long
+        const staggeredDelay = index * baseDelay;
+        
+        // Send hello from router1 to router2
+        setTimeout(() => {
+          animatePacket(
+            router1,
+            router2,
+            `Hello packet from ${router1} to ${router2}`,
+            'hello'
+          );
+        }, staggeredDelay);
+        
+        // Send hello from router2 to router1 with a small additional delay
+        setTimeout(() => {
+          animatePacket(
+            router2,
+            router1,
+            `Hello packet from ${router2} to ${router1}`,
+            'hello'
+          );
+        }, staggeredDelay + 100);
+        
+        console.log(`Scheduled hello packet exchange for ${router1} <-> ${router2} with delay ${staggeredDelay}ms`);
+      });
+      
+      if (neighborRelationships.length > 0) {
+        animationsStarted = true;
+        console.log(`Periodic hello packet broadcast initiated in step ${newStepNumber}`);
+      }
+    }
+    
+    // PHASE 1: Process any pending LSP forwards from the previous step
     if (pendingLSPForwards.length > 0) {
       console.log(`Processing ${pendingLSPForwards.length} pending LSP forwards from previous step`);
       
@@ -1185,7 +1246,7 @@ const RouterSimulator = () => {
       Object.entries(forwardsBySource).forEach(([sourceRouter, forwards]) => {
         // Calculate equal time intervals for packet animations from the same source
         const totalForwardsFromSource = forwards.length;
-        const baseDelay = 500; // increased from 300ms to 500ms
+        const baseDelay = 500; // base delay for packet spacing
         
         // Process each forward with a staggered delay
         forwards.forEach((forward, index) => {
@@ -1209,12 +1270,11 @@ const RouterSimulator = () => {
         });
       });
       
-      // After processing LSP forwards, we're done for this step
-      console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (LSP Forwarding Phase) -----\n`);
-      return;
+      animationsStarted = true;
+      console.log(`LSP Forwarding animations started in step ${newStepNumber}`);
     }
     
-    // PHASE 1: Hello Packet Exchange for New Links
+    // PHASE 2: Hello Packet Exchange for New Links
     // Track previously established connections to identify new links
     const establishedConnections = new Set();
     
@@ -1247,7 +1307,7 @@ const RouterSimulator = () => {
         newLinksFound = true;
         
         // Base delay for staggering hello packets
-        const baseDelay = 500; // increased from 300ms to 500ms
+        const baseDelay = 500; // base delay for packet spacing
         const linkDelay = linkIndex * baseDelay;
         
         // Send hello packets in both directions with staggered delays
@@ -1269,21 +1329,18 @@ const RouterSimulator = () => {
             `Hello packet from ${link.target} to ${link.source}`,
             'hello'
           );
-        }, linkDelay + 250); // increased from 150ms to 250ms for better spacing
+        }, linkDelay + 250); // additional delay for paired hello packets
         
         console.log(`Initiated hello packet exchange for new link: ${link.source} <-> ${link.target} with delay ${linkDelay}ms`);
       }
     });
     
-    // If we found new links and sent hello packets, don't move to LSP phase yet
-    // Let the hello packets establish the neighbor relationships first
     if (newLinksFound) {
-      console.log("New links found - exchanging hello packets. LSP flooding will happen in the next step.");
-      console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (Hello Exchange Phase) -----\n`);
-      return;
+      animationsStarted = true;
+      console.log(`Hello packet exchange animations started in step ${newStepNumber}`);
     }
     
-    // PHASE 2: LSP Flooding (Origination Only)
+    // PHASE 3: LSP Flooding (Origination Only) - Always check this regardless of hello packets
     // For each router that has neighbors, originate an LSP to all neighbors
     // First, make a copy of the current sequence numbers to update
     const updatedSequenceNumbers = { ...routerSequenceNumbers };
@@ -1368,7 +1425,7 @@ const RouterSimulator = () => {
       console.log(`Router ${routerId} flooding LSP with sequence ${seqNumber} to ${neighbors.length} neighbors:`, neighbors);
       
       // Calculate equal time intervals for packet animations
-      const baseDelay = 500; // increased from 300ms to 500ms
+      const baseDelay = 500; // base delay for packet spacing
       
       // Send an LSP from this router to each of its neighbors with staggered delays
       neighbors.forEach((neighborId, index) => {
@@ -1390,6 +1447,8 @@ const RouterSimulator = () => {
           );
         }, staggeredDelay);
       });
+      
+      animationsStarted = true;
     });
     
     // Update sequence numbers in state if any were changed
@@ -1400,9 +1459,9 @@ const RouterSimulator = () => {
       console.log("No sequence numbers were updated");
     }
     
-    // If no routers need to flood LSPs, we should check if we need to calculate final routing tables
-    if (routersNeedingLSPFlood.size === 0 && pendingLSPForwards.length === 0) {
-      console.log("No routers need to flood LSPs and no pending forwards. Link-state database may be stable.");
+    // If no animations were started in this step, check if simulation is complete
+    if (!animationsStarted) {
+      console.log("No animations were started in this step. Link-state database may be stable.");
       
       // Check if all routers have complete routing tables
       const allRoutersHaveTables = routers.every(router => {
@@ -1422,7 +1481,18 @@ const RouterSimulator = () => {
       }
     }
     
-    console.log(`----- COMPLETED NEXT STEP: ${currentStep + 1} (LSP Origination Phase) -----\n`);
+    // Log completion of this step with a summary of what happened
+    let stepSummary = [];
+    if (newStepNumber % 15 === 0 && routers.length > 0) stepSummary.push("Hello broadcast");
+    if (pendingLSPForwards.length > 0) stepSummary.push("LSP forwarding");
+    if (newLinksFound) stepSummary.push("Hello exchange");
+    if (routersNeedingLSPFlood.size > 0) stepSummary.push("LSP origination");
+    
+    const stepTypeDescription = stepSummary.length > 0 
+      ? `(${stepSummary.join(", ")})`
+      : "(No actions)";
+      
+    console.log(`----- COMPLETED NEXT STEP: ${newStepNumber} ${stepTypeDescription} -----\n`);
   };
   
   // Handle edit topology button click
@@ -1440,6 +1510,32 @@ const RouterSimulator = () => {
     // You might want to set a special state variable like setTopologyEditMode(true)
   };
   
+  // Add CSS for the simulation info and step counter
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `
+      .simulation-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .step-counter {
+        background-color: #4a5568;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 14px;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+  
   return (
     <div className="router-simulator">
       <div className="simulator-wrapper">
@@ -1447,8 +1543,15 @@ const RouterSimulator = () => {
         <div className="toolbox">
           <div className="toolbox-title">
             <h1>Link State Routing Simulator</h1>
-            <div className={`simulation-status-badge status-${simulationStatus}`}>
-              {simulationStatus.charAt(0).toUpperCase() + simulationStatus.slice(1)}
+            <div className="simulation-info">
+              <div className={`simulation-status-badge status-${simulationStatus}`}>
+                {simulationStatus.charAt(0).toUpperCase() + simulationStatus.slice(1)}
+              </div>
+              {simulationStatus !== 'idle' && (
+                <div className="step-counter">
+                  Step: {currentStep}
+                </div>
+              )}
             </div>
           </div>
           <div className="toolbox-actions">
