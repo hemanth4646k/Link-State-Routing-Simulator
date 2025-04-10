@@ -80,15 +80,6 @@ const ControlPanel = ({
               Reset Simulation
             </button>
           )}
-          
-          {(isRunning || isPaused) && (
-            <button 
-              onClick={onSendCustomPacket} 
-              className="custom-button"
-            >
-              Custom Packet
-            </button>
-          )}
         </div>
       </div>
       

@@ -5,6 +5,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   const [viewMode, setViewMode] = useState('lsdb'); // Always default to LSDB view
   const [flashingRow, setFlashingRow] = useState(null);
   const [showLogs, setShowLogs] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Add state to force refresh
   const logsContentRef = useRef(null);
   
   // Helper to check if this entry should be highlighted
@@ -38,13 +39,18 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     }
   }, [currentHighlight]);
   
+  // Force refresh when links or lsdbData changes
+  useEffect(() => {
+    setRefreshKey(prev => prev + 1);
+  }, [links, lsdbData]);
+  
   // Effect to auto-select a router when data becomes available
   useEffect(() => {
     if (selectedRouter === '' && Object.keys(lsdbData).length > 0) {
       const firstRouter = Object.keys(lsdbData).sort()[0];
       setSelectedRouter(firstRouter);
     }
-  }, [lsdbData, selectedRouter]);
+  }, [lsdbData, selectedRouter, links]); // Add links dependency
   
   // No longer automatically switch to routing table view when simulation completes
   useEffect(() => {
@@ -59,7 +65,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
         }
       }
     }
-  }, [simulationStatus, routingTables, lsdbData, selectedRouter, viewMode]);
+  }, [simulationStatus, routingTables, lsdbData, selectedRouter, viewMode, links]); // Add links dependency
   
   // Effect to automatically expand logs when simulation is running
   useEffect(() => {
@@ -155,7 +161,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     };
     
     return (
-      <div className="lsdb-table-container">
+      <div className="lsdb-table-container" key={`lsdb-${selectedRouter}-${refreshKey}`}>
         <h4>Link State Database for Router {selectedRouter}</h4>
         <table className="lsdb-table">
           <thead>
@@ -167,7 +173,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
           <tbody>
             {sortedEntries.map(([nodeId, adjacencies]) => (
               <tr 
-                key={nodeId}
+                key={`${nodeId}-${refreshKey}`}
                 className={shouldHighlight(selectedRouter, nodeId) ? 'highlight-change' : ''}
               >
                 <td>{nodeId}</td>
@@ -176,7 +182,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
                     adjacencies.map(adj => {
                       const cost = getEdgeCost(nodeId, adj);
                       return (
-                        <span key={adj} className="adjacency-entry">
+                        <span key={`${adj}-${refreshKey}`} className="adjacency-entry">
                           {adj}{cost !== null && `:${cost}`}
                         </span>
                       );
@@ -220,7 +226,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
     });
     
     return (
-      <div className="routing-table-container">
+      <div className="routing-table-container" key={`routing-${selectedRouter}-${refreshKey}`}>
         <h4>Routing Table for Router {selectedRouter}</h4>
         <table className="routing-table">
           <thead>
@@ -232,7 +238,7 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
           </thead>
           <tbody>
             {sortedEntries.map(entry => (
-              <tr key={entry.destination} className={entry.destination === selectedRouter ? 'self-entry' : ''}>
+              <tr key={`${entry.destination}-${refreshKey}`} className={entry.destination === selectedRouter ? 'self-entry' : ''}>
                 <td>{entry.destination}</td>
                 <td>{entry.nextHop}</td>
                 <td>{entry.cost}</td>
@@ -253,17 +259,46 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   };
   
   const renderSimulationLogs = () => {
-    if (simulationLogs.length === 0) {
-      return null;
+    if (!simulationLogs || simulationLogs.length === 0) {
+      return <p>No simulation logs available.</p>;
     }
     
     return (
-      <button 
-        className="logs-compact-button"
-        onClick={() => setShowLogs(true)}
-      >
-        Show Logs
-      </button>
+      <div className="simulation-logs-container" ref={logsContentRef}>
+        {simulationLogs.map((log, index) => {
+          // Check if log is an object with a message property (new format)
+          if (typeof log === 'object' && log !== null && log.message) {
+            return (
+              <div 
+                key={`log-${index}-${log.timestamp || index}`} 
+                className={`log-entry ${log.type || 'info'}`}
+              >
+                {log.message}
+              </div>
+            );
+          }
+          
+          // Handle string logs (old format)
+          if (typeof log === 'string') {
+            let logClass = 'info';
+            if (log.startsWith('ERROR:')) logClass = 'error';
+            else if (log.startsWith('WARN:')) logClass = 'warning';
+            
+            return (
+              <div key={`log-${index}`} className={`log-entry ${logClass}`}>
+                {log}
+              </div>
+            );
+          }
+          
+          // Fallback for any other type of log
+          return (
+            <div key={`log-${index}`} className="log-entry info">
+              {JSON.stringify(log)}
+            </div>
+          );
+        })}
+      </div>
     );
   };
   
@@ -291,13 +326,35 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
             <div className="logs-content" ref={logsContentRef}>
               <ul className="logs-list">
                 {simulationLogs.map((log, index) => {
-                  const isStepHeader = log.startsWith('---');
+                  // Handle object logs with message property (new format)
+                  if (typeof log === 'object' && log !== null && log.message) {
+                    return (
+                      <li 
+                        key={`log-${index}-${log.timestamp || index}`} 
+                        className={`log-item ${log.type || 'info'}`}
+                      >
+                        {log.message}
+                      </li>
+                    );
+                  }
+                  
+                  // Handle string logs (old format)
+                  if (typeof log === 'string') {
+                    const isStepHeader = log.startsWith('---');
+                    return (
+                      <li 
+                        key={index} 
+                        className={`log-item ${isStepHeader ? 'step-header' : ''}`}
+                      >
+                        {log}
+                      </li>
+                    );
+                  }
+                  
+                  // Fallback for any other log type
                   return (
-                    <li 
-                      key={index} 
-                      className={`log-item ${isStepHeader ? 'step-header' : ''}`}
-                    >
-                      {log}
+                    <li key={index} className="log-item">
+                      {JSON.stringify(log)}
                     </li>
                   );
                 })}

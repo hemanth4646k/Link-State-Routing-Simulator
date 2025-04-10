@@ -165,32 +165,326 @@ const RouterSimulator = () => {
   
   // Delete selected elements
   const deleteSelectedElements = () => {
-    if (simulationStatus === 'running') return;
+    // DEBUG: Log function entry
+    console.log("===== DELETE SELECTED ELEMENTS FUNCTION STARTED =====");
+    console.log("Current simulation status:", simulationStatus);
+    console.log("Selected elements:", selectedElements);
     
-    const { routers: selectedRouterIds, links: selectedLinkIds } = selectedElements;
-    
-    // Delete selected links
-    if (selectedLinkIds.length > 0) {
-      setLinks(prev => prev.filter(link => !selectedLinkIds.includes(link.id)));
+    if (simulationStatus === 'idle') {
+      console.log("Handling deletion during IDLE state");
+      // Regular delete during non-simulation mode
+      const { routers: selectedRouterIds, links: selectedLinkIds } = selectedElements;
+      
+      // List of routers that will need to flood new LSPs
+      const routersNeedingLSPFlood = new Set();
+      
+      // Delete selected links
+      if (selectedLinkIds.length > 0) {
+        console.log("Deleting links:", selectedLinkIds);
+        console.log("Current links before deletion:", links);
+        
+        // For each deleted link, identify the routers that need to send new LSPs
+        const affectedLinks = links.filter(link => selectedLinkIds.includes(link.id));
+        
+        // Store the endpoints of each link so we can trigger LSP flooding
+        affectedLinks.forEach(link => {
+          routersNeedingLSPFlood.add(link.source);
+          routersNeedingLSPFlood.add(link.target);
+        });
+        
+        setLinks(prev => {
+          const newLinks = prev.filter(link => !selectedLinkIds.includes(link.id));
+          console.log("Links after deletion:", newLinks);
+          
+          // IMPORTANT: Immediately update the LSDB with the new topology
+          // This must happen synchronously within this state update to ensure consistency
+          setTimeout(() => {
+            // Force update the LSDB for all affected routers based on the new links
+            if (routersNeedingLSPFlood.size > 0) {
+              console.log("Immediately updating LSDB after link deletion");
+              updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), newLinks);
+            }
+          }, 0);
+          
+          return newLinks;
+        });
+        
+        // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
+        return;
+      }
+      
+      // Delete selected routers and all their connected links
+      if (selectedRouterIds.length > 0) {
+        console.log("Deleting routers:", selectedRouterIds);
+        
+        // First, find all links connected to the selected routers
+        const linkedLinks = links.filter(link => 
+          selectedRouterIds.includes(link.source) || selectedRouterIds.includes(link.target)
+        );
+        
+        // Store the endpoints of each link so we can trigger LSP flooding
+        linkedLinks.forEach(link => {
+          if (!selectedRouterIds.includes(link.source)) {
+            routersNeedingLSPFlood.add(link.source);
+          }
+          if (!selectedRouterIds.includes(link.target)) {
+            routersNeedingLSPFlood.add(link.target);
+          }
+        });
+        
+        console.log("Also deleting linked links:", linkedLinks.map(link => link.id));
+        
+        // Remove the routers
+        setRouters(prev => {
+          const newRouters = prev.filter(router => !selectedRouterIds.includes(router.id));
+          console.log("Routers after deletion:", newRouters);
+          return newRouters;
+        });
+        
+        // Remove all links connected to deleted routers
+        const linkedLinkIds = linkedLinks.map(link => link.id);
+        setLinks(prev => {
+          const newLinks = prev.filter(link => !linkedLinkIds.includes(link.id));
+          console.log("Links after router-related deletion:", newLinks);
+          
+          // IMPORTANT: Immediately update the LSDB with the new topology after router deletion
+          setTimeout(() => {
+            // Force update the LSDB for all affected routers based on the new links
+            if (routersNeedingLSPFlood.size > 0) {
+              console.log("Immediately updating LSDB after router deletion");
+              updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), newLinks);
+            }
+          }, 0);
+          
+          return newLinks;
+        });
+        
+        // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
+        return;
+      }
+      
+      // Clear selection
+      setSelectedElements({routers: [], links: []});
+      setSelectionMode(false);
+      console.log("Selection cleared");
+    } 
+    else if (simulationStatus === 'paused') {
+      console.log("Handling deletion during PAUSED state (simulation active)");
+      // During simulation, we need to trigger LSP flooding when topology changes
+      const { routers: selectedRouterIds, links: selectedLinkIds } = selectedElements;
+      
+      // List of routers that will need to flood new LSPs
+      const routersNeedingLSPFlood = new Set();
+      
+      // Process link deletions
+      if (selectedLinkIds.length > 0) {
+        // DEBUG: Log links before deletion
+        console.log("Current links before deletion:", JSON.stringify(links));
+        console.log("About to delete links:", selectedLinkIds);
+        
+        // For each deleted link, identify the routers that need to send new LSPs
+        const affectedLinks = links.filter(link => selectedLinkIds.includes(link.id));
+        console.log("Affected links:", JSON.stringify(affectedLinks));
+        
+        // Store the endpoints of each link so we can trigger LSP flooding
+        affectedLinks.forEach(link => {
+          routersNeedingLSPFlood.add(link.source);
+          routersNeedingLSPFlood.add(link.target);
+          
+          console.log(`Link deletion affects routers: ${link.source} and ${link.target}`);
+        });
+        
+        // Actually delete the links
+        setLinks(prev => {
+          const newLinks = prev.filter(link => !selectedLinkIds.includes(link.id));
+          console.log("Links after deletion:", JSON.stringify(newLinks));
+          
+          // IMPORTANT: Immediately update the LSDB with the new topology
+          // This must happen synchronously within this state update to ensure consistency
+          setTimeout(() => {
+            // Force update the LSDB for all affected routers based on the new links
+            if (routersNeedingLSPFlood.size > 0) {
+              console.log("Immediately updating LSDB after link deletion");
+              updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), newLinks);
+            }
+          }, 0);
+          
+          return newLinks;
+        });
+        
+        // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
+        return;
+      }
+      
+      // Process router deletions
+      if (selectedRouterIds.length > 0) {
+        console.log("About to delete routers:", selectedRouterIds);
+        
+        // Find links connected to the routers being deleted
+        const affectedLinks = links.filter(link => 
+          selectedRouterIds.includes(link.source) || selectedRouterIds.includes(link.target)
+        );
+        
+        console.log("Router deletion affects links:", JSON.stringify(affectedLinks));
+        
+        // For each affected link, the non-deleted router endpoint needs to flood a new LSP
+        affectedLinks.forEach(link => {
+          if (selectedRouterIds.includes(link.source) && !selectedRouterIds.includes(link.target)) {
+            routersNeedingLSPFlood.add(link.target);
+            console.log(`Router deletion affects router: ${link.target}`);
+          } 
+          else if (selectedRouterIds.includes(link.target) && !selectedRouterIds.includes(link.source)) {
+            routersNeedingLSPFlood.add(link.source);
+            console.log(`Router deletion affects router: ${link.source}`);
+          }
+        });
+        
+        // Delete the routers
+        setRouters(prev => {
+          const newRouters = prev.filter(router => !selectedRouterIds.includes(router.id));
+          console.log("Routers after deletion:", JSON.stringify(newRouters));
+          return newRouters;
+        });
+        
+        // Delete the links connected to deleted routers
+        const linkedLinkIds = affectedLinks.map(link => link.id);
+        setLinks(prev => {
+          const newLinks = prev.filter(link => !linkedLinkIds.includes(link.id));
+          console.log("Links after router-related deletion:", JSON.stringify(newLinks));
+          
+          // IMPORTANT: Immediately update the LSDB with the new topology after router deletion
+          setTimeout(() => {
+            // Force update the LSDB for all affected routers based on the new links
+            if (routersNeedingLSPFlood.size > 0) {
+              console.log("Immediately updating LSDB after router deletion");
+              updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), newLinks);
+            }
+          }, 0);
+          
+          return newLinks;
+        });
+        
+        // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
+        return;
+      }
+      
+      console.log("Routers needing LSP flood:", Array.from(routersNeedingLSPFlood));
+      
+      // Only call updateLSDBAfterTopologyChange if we haven't already handled it in the setLinks callbacks
+      // This code path shouldn't be reached in normal operation
+      if (routersNeedingLSPFlood.size > 0 && selectedLinkIds.length === 0 && selectedRouterIds.length === 0) {
+        console.log("Calling updateLSDBAfterTopologyChange with affected routers");
+        // Get current links to pass to the update function
+        const currentLinks = [...links];
+        updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), currentLinks);
+      } else {
+        console.log("No routers need to flood LSPs or LSP flooding is handled directly in link/router deletion");
+      }
+      
+      // Clear selection
+      setSelectedElements({routers: [], links: []});
+      setSelectionMode(false);
+      console.log("Selection cleared");
     }
     
-    // Delete selected routers and all their connected links
-    if (selectedRouterIds.length > 0) {
-      // First, find all links connected to the selected routers
-      const linkedLinkIds = links.filter(link => 
-        selectedRouterIds.includes(link.source) || selectedRouterIds.includes(link.target)
-      ).map(link => link.id);
-      
-      // Remove the routers
-      setRouters(prev => prev.filter(router => !selectedRouterIds.includes(router.id)));
-      
-      // Remove all links connected to deleted routers
-      setLinks(prev => prev.filter(link => !linkedLinkIds.includes(link.id)));
+    console.log("===== DELETE SELECTED ELEMENTS FUNCTION COMPLETED =====");
+  };
+  
+  // Modify the updateLSDBAfterTopologyChange function to properly handle topology changes
+  const updateLSDBAfterTopologyChange = (affectedRouters, updatedLinks = null) => {
+    console.log("===== UPDATE LSDB AFTER TOPOLOGY CHANGE =====");
+    console.log(`Updating LSDB for routers: ${affectedRouters.join(', ')}`);
+    
+    if (!affectedRouters || affectedRouters.length === 0) {
+      console.log("No affected routers, aborting LSDB update");
+      return;
     }
     
-    // Clear selection
-    setSelectedElements({routers: [], links: []});
-    setSelectionMode(false);
+    // STEP 1: Get current topology info
+    console.log("STEP 1: Gathering current topology information");
+    
+    // Use the provided links if available, otherwise use current links state
+    const currentLinks = updatedLinks || [...links];
+    console.log("Current links for LSDB update:", currentLinks.map(l => `${l.source}-${l.target}`));
+    
+    // Make a local copy of LSDB to modify before setting state
+    const updatedLSDB = JSON.parse(JSON.stringify(lsdbData));
+    
+    // STEP 2: Update the LSDB for each affected router
+    console.log("STEP 2: Updating LSDB for each affected router");
+    
+    // For each affected router, update ONLY its own entry in its LSDB
+    affectedRouters.forEach(routerId => {
+      console.log(`Updating LSDB for router ${routerId}`);
+      
+      // Ensure router entry exists in LSDB
+      if (!updatedLSDB[routerId]) {
+        updatedLSDB[routerId] = {};
+      }
+      
+      // Get current links for this router from our snapshot
+      const routerLinks = currentLinks.filter(link => 
+        link.source === routerId || link.target === routerId
+      );
+      
+      console.log(`Router ${routerId} has ${routerLinks.length} links after topology change`);
+      
+      // Extract neighbors from links - these are the ACTUAL current neighbors
+      const currentNeighbors = routerLinks.map(link => 
+        link.source === routerId ? link.target : link.source
+      );
+      
+      console.log(`Router ${routerId} new neighbors: ${currentNeighbors.join(', ') || 'NONE'}`);
+      
+      // ONLY update this router's own entry in its LSDB
+      // Other entries remain unchanged until LSP flooding
+      updatedLSDB[routerId][routerId] = currentNeighbors;
+      
+      // DO NOT modify or remove other entries in the LSDB
+      // They will be updated through LSP flooding
+    });
+    
+    // STEP 3: Apply the LSDB updates
+    console.log("STEP 3: Applying LSDB updates to state");
+    
+    // Update LSDB state
+    setLsdbData(updatedLSDB);
+    console.log("LSDB updated:", updatedLSDB);
+    
+    // STEP 4: Force UI refresh and log messages
+    console.log("STEP 4: Forcing UI to refresh");
+    
+    // Add an immediate visual refresh that forces the UI to update
+    if (affectedRouters.length > 0) {
+      setCurrentHighlight({
+        routerId: affectedRouters[0],
+        data: [affectedRouters[0], updatedLSDB[affectedRouters[0]][affectedRouters[0]] || []],
+        timestamp: Date.now()
+      });
+    }
+    
+    // Log a message to indicate topology changes
+    setSimulationLogs(prev => [
+      ...prev, 
+      { 
+        message: `Topology changed: Routers ${affectedRouters.join(', ')} updated their LSDB with new neighbor information`, 
+        type: 'warning',
+        timestamp: Date.now()
+      }
+    ]);
+    
+    // Log a message to inform the user to click Next Step
+    setSimulationLogs(prev => [
+      ...prev, 
+      { 
+        message: `Click Next Step to trigger LSP flooding with incremented sequence numbers`, 
+        type: 'info',
+        timestamp: Date.now()
+      }
+    ]);
+    
+    console.log("===== UPDATE LSDB AFTER TOPOLOGY CHANGE COMPLETE =====");
+    // LSP flooding will happen only after Next Step button is clicked
   };
   
   // Add a link between routers with a cost
@@ -221,33 +515,49 @@ const RouterSimulator = () => {
     setCurrentHighlight(null);
     setPackets([]);
     setSimulationLogs([]); // Clear previous logs
+    setPendingLSPForwards([]); // Clear any pending forwards
     
     setSimulationStatus('running');
     
     // Convert our links to the format expected by the flooding algorithm
     const edgesForSimulation = links.map(link => [link.source, link.target, link.cost]);
     
-    // Reset simulation data
-    // Note: We're keeping any existing router and link data, but resetting the simulation state
-    setLsdbData({});
-    setRoutingTables({});
-    setProcessedLSPs({});
-    setRouterSequenceNumbers({}); // Reset sequence numbers
-    
+    // Reset simulation data completely
     // Start with empty LSDBs for each router
     const initialLSDB = {};
     const initialProcessedLSPs = {};
+    const initialRoutingTables = {};
+    const initialSequenceNumbers = {};
     
+    // Initialize empty data structures for each router
     routers.forEach(router => {
       // Initialize empty LSDB for each router
-      initialLSDB[router.id] = {};
+      initialLSDB[router.id] = {
+        // Only include self entry, with empty neighbors list
+        [router.id]: []
+      };
       
       // Initialize empty processed LSPs set for each router
       initialProcessedLSPs[router.id] = new Set();
+      
+      // Initialize empty routing table with just the self entry
+      initialRoutingTables[router.id] = {
+        self: {
+          destination: router.id,
+          nextHop: "—", // Em dash to represent direct
+          cost: 0
+        }
+      };
+      
+      // Initialize sequence number to 0
+      initialSequenceNumbers[router.id] = 0;
     });
     
+    // Set all the simulation state at once to ensure consistency
     setLsdbData(initialLSDB);
     setProcessedLSPs(initialProcessedLSPs);
+    setRoutingTables(initialRoutingTables);
+    setRouterSequenceNumbers(initialSequenceNumbers);
     
     // Save current animation speed for consistent use
     const currentSpeed = animationSpeed;
@@ -357,8 +667,30 @@ const RouterSimulator = () => {
     const fromRouter = routers.find(r => r.id === fromId);
     const toRouter = routers.find(r => r.id === toId);
     
+    // Check if both routers exist
     if (!fromRouter || !toRouter) {
-      // If routers not found, still call the callback to maintain step progression
+      console.log(`Cannot send packet: Router ${!fromRouter ? fromId : toId} not found`);
+      if (externalCallback) externalCallback();
+      return;
+    }
+    
+    // Check if there's a direct link between these routers
+    const linkExists = links.some(link => 
+      (link.source === fromId && link.target === toId) || 
+      (link.source === toId && link.target === fromId)
+    );
+    
+    if (!linkExists) {
+      console.log(`Cannot send packet from ${fromId} to ${toId}: No direct link exists`);
+      // Add log entry to show the user what happened
+      setSimulationLogs(prev => [
+        ...prev,
+        {
+          message: `Failed to send ${packetType.toUpperCase()} packet: No link between Routers ${fromId} and ${toId}`,
+          type: 'error',
+          timestamp: Date.now()
+        }
+      ]);
       if (externalCallback) externalCallback();
       return;
     }
@@ -679,11 +1011,12 @@ const RouterSimulator = () => {
           lsdbUpdated[routerId] = {};
         }
         
-        // Update the adjacency list
+        // Update the adjacency list - no connectivity checks needed
+        // Each router should maintain info about all routers in the network
         lsdbUpdated[routerId][nodeId] = adjList;
         console.log(`Router ${routerId} updated LSDB with ${nodeId}'s adjacency list:`, adjList);
         
-        // Now that we've updated the LSDB, update the sequence number
+        // Update sequence number if provided
         if (seqNumber !== null) {
           // Initialize sequence number tracking if needed
           if (!lsdbUpdated[routerId].sequenceNumbers) {
@@ -695,7 +1028,7 @@ const RouterSimulator = () => {
           console.log(`Router ${routerId} updated sequence number for ${lspOwner} to ${seqNumber}`);
         }
         
-        // Instead of forwarding LSPs immediately, queue them for the next step
+        // Queue LSP forwarding if needed
         if (shouldForward && seqNumber !== null) {
           // Find potential forwarding targets
           if (lsdbUpdated[routerId][routerId]) {
@@ -712,21 +1045,16 @@ const RouterSimulator = () => {
             if (forwardingTargets.length > 0) {
               console.log(`Router ${routerId} queueing LSP-${lspOwner}-${seqNumber} to be forwarded to ${forwardingTargets.length} neighbors in next step`);
               
-              // Create a map of existing pending forwards to prevent duplicates
-              // We'll use this to check before adding new forwards
               setPendingLSPForwards(prev => {
-                // Create a map of existing forwards for duplicate checking
                 const existingForwards = new Map();
                 prev.forEach(forward => {
                   const key = `${forward.from}-${forward.to}-${forward.lspOwner}-${forward.sequenceNumber}`;
                   existingForwards.set(key, true);
                 });
                 
-                // Only add forwards that don't exist yet
                 const newForwards = forwardingTargets
                   .map(targetId => {
                     const forwardKey = `${routerId}-${targetId}-${lspOwner}-${seqNumber}`;
-                    // Only include if not already in the queue
                     if (!existingForwards.has(forwardKey)) {
                       return {
                         from: routerId,
@@ -738,11 +1066,8 @@ const RouterSimulator = () => {
                     }
                     return null;
                   })
-                  .filter(forward => forward !== null); // Remove any nulls
+                  .filter(forward => forward !== null);
                 
-                console.log(`Adding ${newForwards.length} new forwards, skipping ${forwardingTargets.length - newForwards.length} duplicates`);
-                
-                // Combine with existing forwards
                 return [...prev, ...newForwards];
               });
             } else {
@@ -754,30 +1079,20 @@ const RouterSimulator = () => {
         }
         
         // Update routing tables immediately to reflect the new LSDB information
-        // This ensures the left panel shows updated information after each packet
         setTimeout(() => {
-          // Calculate updated routing tables for this router
           const routerTables = calculateDijkstraForRouter(routerId, lsdbUpdated);
-          
-          // Update routing tables state with the new information
           setRoutingTables(prevTables => {
             const updatedTables = { ...prevTables };
-            
-            // Initialize router entry if it doesn't exist
             if (!updatedTables[routerId]) {
               updatedTables[routerId] = {};
             }
-            
-            // Add self-route if missing
             if (!updatedTables[routerId].self) {
               updatedTables[routerId].self = {
                 destination: routerId,
-                nextHop: "—", // Em dash to represent direct
+                nextHop: "—",
                 cost: 0
               };
             }
-            
-            // Merge in the new calculated routes
             if (routerTables) {
               Object.keys(routerTables).forEach(destId => {
                 if (destId !== 'self') {
@@ -785,10 +1100,9 @@ const RouterSimulator = () => {
                 }
               });
             }
-            
             return updatedTables;
           });
-        }, 10); // Very small timeout to ensure state updates have completed
+        }, 10);
         
         return lsdbUpdated;
       });
@@ -1179,8 +1493,18 @@ const RouterSimulator = () => {
           routerData[routerId].forEach(neighborId => {
             // Create a unique relationship identifier
             const relationship = [routerId, neighborId].sort().join('-');
-            if (!neighborRelationships.includes(relationship)) {
+            
+            // Verify that this link still exists in the current topology
+            const linkExists = links.some(link => 
+              (link.source === routerId && link.target === neighborId) ||
+              (link.source === neighborId && link.target === routerId)
+            );
+            
+            // Only add if the link still exists in the current topology
+            if (linkExists && !neighborRelationships.includes(relationship)) {
               neighborRelationships.push(relationship);
+            } else if (!linkExists) {
+              console.log(`Skip hello for ${routerId}-${neighborId}: Link no longer exists in topology`);
             }
           });
         }
