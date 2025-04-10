@@ -120,7 +120,7 @@ const ControlPanel = ({
             step="0.1"
             value={speed}
             onChange={handleSpeedChange}
-            disabled={(!isRunning && !isPausedState) || isPaused}
+            disabled={isPaused}
           />
           <div className="speed-value">{speed.toFixed(1)}x</div>
         </div>

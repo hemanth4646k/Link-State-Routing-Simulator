@@ -1435,15 +1435,26 @@ const RouterSimulator = () => {
     // Reset to idle state
     setSimulationStatus('idle');
     
-    // Reset animation speed to default if needed
-    if (animationSpeed !== 0.5) {
-      setAnimationSpeed(0.5);
-    }
+    // No longer reset animation speed to default - preserve user's preference
   };
   
   // Handle speed change
   const handleSpeedChange = (speed) => {
     setAnimationSpeed(speed);
+    
+    // Update all active GSAP animations to the new speed
+    const allAnimations = gsap.globalTimeline.getChildren();
+    allAnimations.forEach(animation => {
+      if (animation.isActive()) {
+        // Calculate new duration based on the speed
+        const newDuration = 1.0 / speed;
+        // Get current progress
+        const currentProgress = animation.progress();
+        // Adjust the timeline to the new speed while preserving progress
+        animation.duration(newDuration);
+        animation.progress(currentProgress);
+      }
+    });
   };
   
   // Toggle connect mode
