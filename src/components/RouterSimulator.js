@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { gsap } from 'gsap';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import RouterNode from './RouterNode';
@@ -10,6 +10,7 @@ import LinkCostModal from './LinkCostModal';
 import CustomPacketModal from './CustomPacketModal';
 import ThreeScene from './ThreeScene';
 import { runSimulation } from '../utils/simulationUtils';
+import Tutorial from './Tutorial';
 
 // Register the MotionPath plugin
 gsap.registerPlugin(MotionPathPlugin);
@@ -38,6 +39,9 @@ const RouterSimulator = () => {
   const [animationInProgress, setAnimationInProgress] = useState(false);
   // Add a new state variable to track routers that have recently had sequence numbers incremented due to topology changes
   const [recentlyIncrementedSequences, setRecentlyIncrementedSequences] = useState(new Set());
+  const [showTutorial, setShowTutorial] = useState(true); // Always start with tutorial visible
+  // First, add a new state for moveMode around line 40 where other state variables are defined
+  const [moveMode, setMoveMode] = useState(false);
   
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
@@ -72,8 +76,21 @@ const RouterSimulator = () => {
     // Don't allow dragging during simulation
     if (simulationStatus === 'running') return; 
     
-    // In selection mode, only selected routers can be dragged
-    if (selectionMode && !selectedElements.routers.includes(id)) return;
+    // Don't allow dragging in selection (delete) mode
+    if (selectionMode) return;
+    
+    // In move mode, we want to allow dragging the router that was clicked
+    // The router will be selected in ThreeScene before dragging starts
+    // So we'll make sure it's in the selected elements if it's not already
+    if (moveMode) {
+      if (!selectedElements.routers.includes(id)) {
+        // Add the router to selected elements if it's not already there
+        setSelectedElements(prev => ({
+          ...prev,
+          routers: [...prev.routers, id]
+        }));
+      }
+    }
     
     // Ensure we have a valid stage reference
     if (!stageRef.current) return;
@@ -120,7 +137,7 @@ const RouterSimulator = () => {
         setSelectedRouters([...selectedRouters, id]);
         setShowLinkCostModal(true);
       }
-    } else if (selectionMode) {
+    } else if (selectionMode || moveMode) {
       // Toggle selection of this router
       setSelectedElements(prev => {
         const isSelected = prev.routers.includes(id);
@@ -136,7 +153,7 @@ const RouterSimulator = () => {
   
   // Handle link click for selection
   const handleLinkClick = (linkId) => {
-    if (simulationStatus === 'running' || connectMode) return;
+    if (simulationStatus === 'running' || connectMode || moveMode) return;
     
     if (selectionMode) {
       setSelectedElements(prev => {
@@ -532,9 +549,19 @@ const RouterSimulator = () => {
         // Always include self route
         updatedTables[routerId].self = {
           destination: routerId,
-          nextHop: "—",
+          nextHop: "—", // Em dash to represent direct
           cost: 0
         };
+        
+        // Clear previous routes that might be affected by the topology change
+        if (affectedRouters.includes(routerId)) {
+          const destinations = Object.keys(updatedTables[routerId]).filter(key => key !== 'self');
+          destinations.forEach(destId => {
+            delete updatedTables[routerId][destId];
+          });
+          
+          console.log(`Cleared existing routes for Router ${routerId} due to topology change`);
+        }
         
         // Add routes from calculated tables
         if (routerTables) {
@@ -609,14 +636,117 @@ const RouterSimulator = () => {
     const source = routers.find(r => r.id === sourceId);
     const target = routers.find(r => r.id === targetId);
     
-    const newLink = {
-      id: `${sourceId}-${targetId}`,
-      source: sourceId,
-      target: targetId,
-      cost: parseInt(cost)
-    };
+    // Check if a link already exists between these routers (in either direction)
+    const existingLinkForward = links.find(link => 
+      (link.source === sourceId && link.target === targetId)
+    );
     
-    setLinks([...links, newLink]);
+    const existingLinkBackward = links.find(link => 
+      (link.source === targetId && link.target === sourceId)
+    );
+    
+    if (existingLinkForward || existingLinkBackward) {
+      // If a link already exists, update its cost instead of creating a new one
+      const existingLink = existingLinkForward || existingLinkBackward;
+      const existingCost = existingLink.cost;
+      
+      // Confirm with the user before updating
+      const confirmUpdate = window.confirm(
+        `A link already exists between Router ${sourceId} and Router ${targetId} with cost ${existingCost}. \n\n` +
+        `In Link State Routing, we should update the existing link's cost instead of creating duplicate links. \n\n` +
+        `Would you like to update the cost from ${existingCost} to ${cost}?`
+      );
+      
+      if (confirmUpdate) {
+        // Update the existing link's cost
+        setLinks(prevLinks => 
+          prevLinks.map(link => 
+            link === existingLink ? { ...link, cost: parseInt(cost) } : link
+          )
+        );
+        
+        // In Link State Algorithm, only the directly connected routers would detect the change
+        // They would then originate new LSPs with incremented sequence numbers
+        if (simulationStatus === 'running') {
+          // Mark the affected routers for LSP origination in the next step
+          // First, identify the routers directly connected to this link
+          const affectedRouters = [existingLink.source, existingLink.target];
+          
+          // Increment sequence numbers only for these directly affected routers
+          // This will trigger them to generate new LSPs in the next step
+          setRouterSequenceNumbers(prevSeqNums => {
+            const newSeqNums = { ...prevSeqNums };
+            
+            affectedRouters.forEach(routerId => {
+              if (!newSeqNums[routerId]) {
+                newSeqNums[routerId] = 1;
+              } else {
+                newSeqNums[routerId]++;
+              }
+              console.log(`Incremented sequence number for Router ${routerId} to ${newSeqNums[routerId]} due to link cost update`);
+            });
+            
+            return newSeqNums;
+          });
+          
+          // Add the routers to a set of recently incremented sequences
+          // This will be used in the next step to originate new LSPs
+          setRecentlyIncrementedSequences(prevSet => {
+            const newSet = new Set(prevSet);
+            affectedRouters.forEach(routerId => newSet.add(routerId));
+            return newSet;
+          });
+          
+          // Update ONLY the directly connected routers' view of their own neighborhood
+          setLsdbData(prevLsdb => {
+            const updatedLsdb = JSON.parse(JSON.stringify(prevLsdb));
+            
+            // For each affected router
+            affectedRouters.forEach(routerId => {
+              // Ensure the router has an entry in the LSDB
+              if (!updatedLsdb[routerId]) {
+                updatedLsdb[routerId] = {};
+              }
+              
+              // Ensure sequence numbers tracking exists
+              if (!updatedLsdb[routerId].sequenceNumbers) {
+                updatedLsdb[routerId].sequenceNumbers = {};
+              }
+              
+              // Update the router's own sequence number
+              const seqNum = prevLsdb[routerId]?.sequenceNumbers?.[routerId] || 0;
+              updatedLsdb[routerId].sequenceNumbers[routerId] = seqNum + 1;
+              
+              // The router's view of itself (neighbors) doesn't change, just the link cost
+              // But we need to set the sequence number that will trigger LSP flooding
+            });
+            
+            return updatedLsdb;
+          });
+          
+          // Show feedback to the user about what will happen
+          alert(
+            `Link cost updated from ${existingCost} to ${cost}.\n\n` +
+            `Router ${existingLink.source} and Router ${existingLink.target} will detect this change and ` +
+            `originate new LSPs with incremented sequence numbers.\n\n` +
+            `Other routers will learn about this change through normal LSP flooding in subsequent steps.\n\n` +
+            `You can now use the Next Step button to observe how this change propagates through the network.`
+          );
+        }
+      }
+    } else {
+      // Create a new link if none exists
+      const newLink = {
+        id: `${sourceId}-${targetId}`,
+        source: sourceId,
+        target: targetId,
+        cost: parseInt(cost)
+      };
+      
+      setLinks([...links, newLink]);
+    }
+    
+    // Reset UI state
     setSelectedRouters([]);
     setShowLinkCostModal(false);
     setConnectMode(false);
@@ -1224,7 +1354,6 @@ const RouterSimulator = () => {
           if (!lsdbUpdated[routerId].sequenceNumbers) {
             lsdbUpdated[routerId].sequenceNumbers = {};
           }
-          
           // Update to the new sequence number
           lsdbUpdated[routerId].sequenceNumbers[lspOwner] = seqNumber;
           console.log(`Router ${routerId} updated sequence number for ${lspOwner} to ${seqNumber}`);
@@ -1296,16 +1425,18 @@ const RouterSimulator = () => {
               // Update the routing tables
               setRoutingTables(prevTables => {
                 const updatedTables = { ...prevTables };
+                
+                // Ensure router entry exists
                 if (!updatedTables[rid]) {
                   updatedTables[rid] = {};
                 }
-                if (!updatedTables[rid].self) {
-                  updatedTables[rid].self = {
-                    destination: rid,
-                    nextHop: "—",
-                    cost: 0
-                  };
-                }
+                
+                // Always include self route
+                updatedTables[rid].self = {
+                  destination: rid,
+                  nextHop: "—", // Em dash to represent direct
+                  cost: 0
+                };
                 
                 // Clear previous routes that might be affected by the topology change
                 if (topologyChanged) {
@@ -1334,6 +1465,7 @@ const RouterSimulator = () => {
                   Object.keys(updatedTables[rid]).forEach(destId => {
                     if (destId !== 'self') {
                       const route = updatedTables[rid][destId];
+                      // If the next hop is the other affected router, this route may now be invalid
                       if (route && removedNeighbors.includes(route.nextHop)) {
                         console.log(`Removing route to ${destId} through removed neighbor ${route.nextHop}`);
                         delete updatedTables[rid][destId];
@@ -1689,6 +1821,17 @@ const RouterSimulator = () => {
     
     // Reset to idle state
     setSimulationStatus('idle');
+    
+    // Resume and clear any paused GSAP animations
+    gsap.globalTimeline.clear();
+    gsap.globalTimeline.resume();
+    
+    // Kill any in-progress animations
+    gsap.killTweensOf('*');
+    
+    // Reset the paused state
+    setIsPaused(false);
+    setAnimationInProgress(false);
     
     // No longer reset animation speed to default - preserve user's preference
   };
@@ -2130,12 +2273,26 @@ const RouterSimulator = () => {
     // Log recently incremented routers to help with debugging
     console.log("Routers with recently incremented sequence numbers:", Array.from(recentlyIncrementedSequences));
     
+    // First, add all routers that had sequence numbers incremented due to topology changes
+    recentlyIncrementedSequences.forEach(routerId => {
+      if (lsdbData[routerId] && lsdbData[routerId][routerId]) {
+        // Only include if the router knows its own neighbors
+        routersNeedingLSPFlood.add(routerId);
+        console.log(`Router ${routerId} needs to flood LSP due to recently incremented sequence number`); 
+      }
+    });
+    
     // Check each router to see if it has neighbors but hasn't flooded an LSP
     // or if its topology has changed since the last LSP flooding
     Object.entries(lsdbData).forEach(([routerId, routerData]) => {
       // Skip if router doesn't know about itself yet (no neighbors)
       if (!routerData[routerId]) {
         console.log(`Router ${routerId} doesn't know its own neighbors yet, can't flood LSP`);
+        return;
+      }
+      
+      // Skip if already added due to sequence number increment
+      if (routersNeedingLSPFlood.has(routerId)) {
         return;
       }
       
@@ -2334,9 +2491,16 @@ const RouterSimulator = () => {
       ? `(${stepSummary.join(", ")})`
       : "(No actions)";
     
-    // Clear the recently incremented routers after processing this step
-    setRecentlyIncrementedSequences(new Set());
-    console.log("Cleared recently incremented sequence numbers tracking");
+    // Only clear the recently incremented sequences if they were actually processed
+    // or if there's nothing to process (prevents accumulation of stale entries)
+    const shouldClearIncrements = routersNeedingLSPFlood.size > 0 || recentlyIncrementedSequences.size === 0;
+    
+    if (shouldClearIncrements) {
+      setRecentlyIncrementedSequences(new Set());
+      console.log("Cleared recently incremented sequence numbers tracking");
+    } else {
+      console.log("Preserving recently incremented sequence numbers for next step");
+    }
       
     console.log(`----- COMPLETED NEXT STEP: ${newStepNumber} ${stepTypeDescription} -----\n`);
   };
@@ -2382,8 +2546,20 @@ const RouterSimulator = () => {
     };
   }, []);
   
+  // Handle tutorial completion
+  const handleTutorialComplete = () => {
+    console.log('Tutorial completed, hiding it');
+    setShowTutorial(false);
+    // Store in localStorage to remember the user has completed the tutorial
+    localStorage.setItem('lsaTutorialCompleted', 'true');
+  };
+  
   return (
     <div className="router-simulator">
+      {showTutorial && (
+        console.log('About to render Tutorial component, showTutorial:', showTutorial),
+        <Tutorial key="tutorial" onComplete={handleTutorialComplete} />
+      )}
       <div className="simulator-wrapper">
         {/* Toolbox */}
         <div className="toolbox">
@@ -2411,31 +2587,82 @@ const RouterSimulator = () => {
             </div>
             <button 
               onClick={toggleConnectMode}
-              className={connectMode ? 'active' : ''}
-              disabled={simulationStatus === 'running' || selectionMode}
+              className={`toolbox-button ${connectMode ? 'active' : ''}`}
+              disabled={simulationStatus === 'running' || selectionMode || moveMode}
             >
               {connectMode ? 'Cancel Connect' : 'Connect Routers'}
             </button>
-            <button 
-              onClick={toggleSelectionMode}
-              className={selectionMode ? 'active' : ''}
+            
+            {!selectionMode ? (
+              // Show "Delete Elements" button when not in selection mode
+              <button 
+                onClick={() => {
+                  // Turn off other modes
+                  setSelectionMode(true);
+                  setConnectMode(false);
+                  setMoveMode(false);
+                  setSelectedRouters([]);
+                }}
+                className="toolbox-button"
+                disabled={simulationStatus === 'running' || moveMode}
+              >
+                Delete Elements
+              </button>
+            ) : (
+              // Show Delete and Cancel buttons when in selection mode
+              <>
+                <button 
+                  onClick={deleteSelectedElements}
+                  className="toolbox-button delete-button"
+                  disabled={selectedElements.routers.length === 0 && selectedElements.links.length === 0}
+                >
+                  Delete
+                </button>
+                <button 
+                  onClick={() => {
+                    setSelectionMode(false);
+                    setSelectedElements({routers: [], links: []});
+                  }}
+                  className="toolbox-button"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+            
+            <button
+              onClick={() => {
+                // Turn off other modes
+                if (moveMode) {
+                  setMoveMode(false);
+                } else {
+                  setMoveMode(true);
+                  setConnectMode(false);
+                  setSelectionMode(false);
+                  setSelectedRouters([]);
+                  setSelectedElements({routers: [], links: []});
+                }
+              }}
+              className={`toolbox-button ${moveMode ? 'active' : ''}`}
               disabled={simulationStatus === 'running'}
             >
-              {selectionMode ? 'Exit Selection Mode' : 'Selection Mode'}
+              {moveMode ? 'Exit Move Mode' : 'Move Elements'}
             </button>
-            {selectionMode && (
-              <button 
-                onClick={deleteSelectedElements}
-                className="delete-button"
-                disabled={simulationStatus === 'running' || 
-                         (selectedElements.routers.length === 0 && selectedElements.links.length === 0)}
-              >
-                Delete Selected
-              </button>
-            )}
+            <button
+              onClick={() => {
+                console.log('Help button clicked, showing tutorial');
+                // Force showing the tutorial and reset localStorage
+                localStorage.removeItem('lsaTutorialCompleted');
+                setShowTutorial(true);
+              }}
+              className="toolbox-button"
+              title="View the tutorial again"
+            >
+              Help
+            </button>
             <button 
               onClick={handleSendCustomPacket}
-              className="custom-button"
+              className="toolbox-button custom-button"
               disabled={simulationStatus !== 'running' && simulationStatus !== 'paused' || isPaused}
             >
               Send Custom Packet
@@ -2446,7 +2673,7 @@ const RouterSimulator = () => {
         {/* Main simulator container with the stage and 3D scene */}
         <div className="simulator-container">
           <div 
-            className={`simulator-stage ${selectionMode ? 'selection-mode-active' : ''}`}
+            className={`simulator-stage ${selectionMode || moveMode ? 'selection-mode-active' : ''}`}
             ref={stageRef}
           >
             <ThreeScene
@@ -2461,6 +2688,7 @@ const RouterSimulator = () => {
               disabled={simulationStatus === 'running' && !isPaused}
               connectMode={connectMode}
               selectionMode={selectionMode}
+              moveMode={moveMode}
               simulationStatus={simulationStatus}
             />
           </div>
@@ -2497,7 +2725,6 @@ const RouterSimulator = () => {
               onSpeedChange={handleSpeedChange}
               onSendCustomPacket={handleSendCustomPacket}
               onNextStep={handleNextStep}
-              onEditTopology={handleEditTopology}
               simulationStatus={simulationStatus}
               speed={animationSpeed}
               disabled={routers.length < 2 || links.length === 0}

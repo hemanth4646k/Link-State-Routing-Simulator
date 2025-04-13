@@ -4,12 +4,13 @@ import { OrbitControls, Html, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Router component - represents a 3D router node
-const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDrag, selectionMode }) => {
+const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDrag, selectionMode, moveMode }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [glowEffect, setGlowEffect] = useState(null); // 'accept', 'reject', or 'receive'
+  const dragPointerId = useRef(null);
   
   // Function to make router glow with appropriate color
   const glow = (effect) => {
@@ -91,11 +92,21 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
   
   // Method to start dragging
   const startDragging = (e) => {
-    if (!isSelected || !selectionMode) return;
+    // Only allow dragging in moveMode (and don't require preselection anymore)
+    if (!moveMode) return;
     
     // Prevent event propagation
     e.stopPropagation();
     setIsDragging(true);
+    
+    // Set cursor style
+    gl.domElement.style.cursor = 'grabbing';
+    
+    // Capture the pointer to ensure we get all events even when the mouse moves quickly
+    if (e.pointerId) {
+      dragPointerId.current = e.pointerId;
+      gl.domElement.setPointerCapture(e.pointerId);
+    }
     
     // Update mouse coordinates for raycaster
     raycaster.setFromCamera(mouse, camera);
@@ -114,17 +125,15 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
     // Find the intersection with the plane
     const intersection = new THREE.Vector3();
     if (raycaster.ray.intersectPlane(dragPlane.current, intersection)) {
-      // Calculate offset between intersection and router position
-      dragOffset.current.copy(intersection).sub(new THREE.Vector3(...position));
-      
-      // Set up UI and capture pointer
-      gl.domElement.style.cursor = 'grabbing';
-      gl.domElement.setPointerCapture(e.pointerId);
-      
-      // Add event listeners for movement and release
-      gl.domElement.addEventListener('pointermove', handleDrag);
-      gl.domElement.addEventListener('pointerup', stopDragging);
+      // Calculate drag offset
+      dragOffset.current.copy(intersection).sub(routerPosition);
     }
+    
+    // Add event listeners for drag and release
+    gl.domElement.addEventListener('pointermove', handleDrag);
+    gl.domElement.addEventListener('pointerup', stopDragging);
+    gl.domElement.addEventListener('pointerleave', stopDragging);
+    gl.domElement.addEventListener('pointercancel', stopDragging);
   };
   
   // Method to handle dragging movement
@@ -155,17 +164,27 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
     // Remove event listeners
     gl.domElement.removeEventListener('pointermove', handleDrag);
     gl.domElement.removeEventListener('pointerup', stopDragging);
+    gl.domElement.removeEventListener('pointerleave', stopDragging);
+    gl.domElement.removeEventListener('pointercancel', stopDragging);
     
-    // Release pointer capture
-    if (e.pointerId) {
-      gl.domElement.releasePointerCapture(e.pointerId);
+    // Release pointer capture using our stored pointerId
+    if (dragPointerId.current !== null) {
+      try {
+        gl.domElement.releasePointerCapture(dragPointerId.current);
+      } catch (err) {
+        // Ignore errors if the pointer was already released
+      }
+      dragPointerId.current = null;
     }
   };
   
   // Handle all pointer interactions
   const handlePointerDown = (e) => {
-    // If disabled and not in selection mode, do nothing
-    if (disabled && !selectionMode && !connectMode) return;
+    // If disabled and not in selection/connect/move mode, do nothing
+    if (disabled && !selectionMode && !connectMode && !moveMode) return;
+    
+    // Important: stop propagation for all pointer events
+    e.stopPropagation();
     
     // In connect mode, just register click
     if (connectMode) {
@@ -175,25 +194,37 @@ const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDr
     
     // In selection mode
     if (selectionMode) {
-      // If already selected, start dragging
-      if (isSelected) {
-        startDragging(e);
-      } else {
-        // Otherwise, select this router
-        onClick(id);
-      }
-    } else {
-      // Regular click in normal mode
+      // Just select the router (no dragging in selection/delete mode)
       onClick(id);
+      return;
     }
+    
+    // In move mode
+    if (moveMode) {
+      // Always click to select first
+      onClick(id);
+      
+      // Then start dragging immediately
+      // Add a small timeout to ensure selection state is updated first
+      setTimeout(() => {
+        startDragging(e);
+      }, 0);
+      
+      return;
+    }
+    
+    // Regular click in normal mode
+    onClick(id);
   };
   
-  // Clean up event listeners when component unmounts
+  // Clean up event listeners when component unmounts or when dragging state changes
   useEffect(() => {
     return () => {
       if (isDragging) {
         gl.domElement.removeEventListener('pointermove', handleDrag);
         gl.domElement.removeEventListener('pointerup', stopDragging);
+        gl.domElement.removeEventListener('pointerleave', stopDragging);
+        gl.domElement.removeEventListener('pointercancel', stopDragging);
       }
     };
   }, [isDragging]);
@@ -421,7 +452,7 @@ const Packet = ({ id, position, type, data }) => {
 };
 
 // Camera controls component
-const CameraController = ({ disabled, selectionMode, simulationRunning }) => {
+const CameraController = ({ disabled, selectionMode, moveMode, simulationRunning }) => {
   const { camera, gl } = useThree();
   const controls = useRef();
   
@@ -447,14 +478,13 @@ const CameraController = ({ disabled, selectionMode, simulationRunning }) => {
     const shouldEnableControls = simulationRunning || !disabled;
     controls.current.enabled = shouldEnableControls;
     
-    // In selection mode, disable rotation/pan but allow zoom
-    if (selectionMode) {
+    // In selection mode or move mode, disable rotation/pan but allow zoom
+    if (selectionMode || moveMode) {
       controls.current.enableRotate = false;
       controls.current.enablePan = false;
       controls.current.enableZoom = true;
     } else {
-      // Always enable rotation and pan when not in selection mode
-      // This allows panning in 3D space when paused
+      // Enable rotation and pan when not in selection or move mode
       controls.current.enableRotate = true;
       controls.current.enablePan = true;
       controls.current.enableZoom = true;
@@ -472,14 +502,14 @@ const CameraController = ({ disabled, selectionMode, simulationRunning }) => {
     controls.current.enableDamping = true;
     controls.current.dampingFactor = 0.1;
     controls.current.rotateSpeed = 0.8;
-  }, [disabled, selectionMode, simulationRunning]);
+  }, [disabled, selectionMode, moveMode, simulationRunning]);
   
   return (
     <OrbitControls
       ref={controls}
       args={[camera, gl.domElement]}
-      enableRotate={!selectionMode}
-      enablePan={!selectionMode}
+      enableRotate={!(selectionMode || moveMode)}
+      enablePan={!(selectionMode || moveMode)}
       enableZoom={true}
       minDistance={2}
       maxDistance={100}
@@ -506,6 +536,7 @@ const ThreeScene = ({
   disabled, 
   connectMode,
   selectionMode,
+  moveMode,
   simulationStatus
 }) => {
   // Track if simulation is running to enable controls during animation
@@ -593,6 +624,8 @@ const ThreeScene = ({
     
     if (selectionMode) {
       canvas.style.cursor = 'pointer';
+    } else if (moveMode) {
+      canvas.style.cursor = 'grab';
     } else if (connectMode) {
       canvas.style.cursor = 'crosshair';
     } else if (disabled && !simulationRunning) {
@@ -600,7 +633,7 @@ const ThreeScene = ({
     } else {
       canvas.style.cursor = 'grab';
     }
-  }, [selectionMode, connectMode, disabled, simulationRunning]);
+  }, [selectionMode, moveMode, connectMode, disabled, simulationRunning]);
   
   return (
     <div 
@@ -626,6 +659,7 @@ const ThreeScene = ({
         <CameraController 
           disabled={disabled} 
           selectionMode={selectionMode} 
+          moveMode={moveMode}
           simulationRunning={simulationRunning}
         />
         
@@ -647,13 +681,14 @@ const ThreeScene = ({
             isSelected={
               connectMode 
                 ? selectedRouters.includes(router.id)
-                : selectionMode && selectedElements.routers.includes(router.id)
+                : (selectionMode || moveMode) && selectedElements.routers.includes(router.id)
             }
             onClick={handleRouterClick}
             onDrag={handleRouterDrag}
-            disabled={disabled && !simulationRunning && !selectionMode && !connectMode}
+            disabled={disabled && !simulationRunning && !selectionMode && !connectMode && !moveMode}
             connectMode={connectMode}
             selectionMode={selectionMode}
+            moveMode={moveMode}
           />
         ))}
         
@@ -684,7 +719,26 @@ const ThreeScene = ({
           boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
           fontWeight: 'bold'
         }}>
-          Selection Mode: {selectedElements.routers.length > 0 ? 'Drag to Reposition' : 'Click to Select'}
+          Delete Mode: Click to Select
+        </div>
+      )}
+      
+      {/* Move mode indicator overlay */}
+      {moveMode && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          backgroundColor: 'rgba(52, 152, 219, 0.8)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          pointerEvents: 'none',
+          zIndex: 100,
+          boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+          fontWeight: 'bold'
+        }}>
+          Move Mode: {selectedElements.routers.length > 0 ? 'Drag to Reposition' : 'Click to Select'}
         </div>
       )}
       
@@ -694,7 +748,7 @@ const ThreeScene = ({
           position: 'absolute',
           top: '10px',
           left: '10px',
-          backgroundColor: 'rgba(52, 152, 219, 0.8)',
+          backgroundColor: 'rgba(46, 204, 113, 0.8)',
           color: 'white',
           padding: '10px',
           borderRadius: '5px',

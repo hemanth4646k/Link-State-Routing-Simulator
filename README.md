@@ -2,6 +2,10 @@
 
 A visual simulator for link state routing protocols, using drag-and-drop routers and animated packet transmission.
 
+## Author
+
+**Hemanth sai Somaraju**
+
 ## Features
 
 - Drag and drop routers onto the simulation stage
@@ -10,37 +14,62 @@ A visual simulator for link state routing protocols, using drag-and-drop routers
 - View Link State Database (LSDB) for each router
 - View routing tables calculated from the LSDB using Dijkstra's algorithm
 - Control simulation speed with a slider
-- Pause, resume, and end simulations
+- Pause, resume, and edit topology during simulations
+- Observe network convergence after topology changes
 
 ## How to Use
 
+### Getting Started
 1. **Add Routers**: Drag routers from the toolbox onto the simulation stage
 2. **Connect Routers**: 
    - Click the "Connect Routers" button
    - Click on the first router you want to connect
    - Click on the second router
    - Enter the link cost in the modal that appears
-3. **Run Simulation**:
+
+### Running Simulations
+1. **Start Simulation**:
    - Click "Start Simulation" to begin the link state routing process
+   - The simulation will initialize and wait for you to click "Next Step"
+2. **Step Through the Simulation**:
+   - Click "Next Step" to advance the simulation one step at a time
+   - Each step progresses the Link State Algorithm
    - Watch as LSP packets are transmitted between routers
-   - The Link State Database for each router is updated as packets are received
-4. **View Results**:
-   - After the simulation completes, you can view either the LSDB or routing tables
-   - Select a router from the dropdown to see its specific information
-5. **Control Options**:
-   - Adjust animation speed using the slider
-   - Pause/Resume simulation as needed
-   - End simulation to reset and start over
+   - The Link State Database and routing tables update as packets are received
+3. **Make Topology Changes**:
+   - While simulation is running, click "Pause" to pause the simulation
+   - Click "Select" to enter selection mode
+   - Click on links or routers you want to delete
+   - Click "Delete Selected" to remove them
+   - Observe how LSPs with incremented sequence numbers are flooded
+   - Watch how routing tables recalculate based on the new topology
 
-## Technical Details
+### Understanding the Interface
+1. **Left Panel**: Simulation controls and instructions
+   - Start/Pause/Resume/Reset buttons
+   - Speed control slider
+   - Simulation steps explanation
 
-This simulator demonstrates how link state routing protocols work:
+2. **Right Panel**: Network state information
+   - Router selector dropdown
+   - View toggle for LSDB or Routing Table
+   - Current LSDB showing links between routers
+   - Routing Table showing best paths to destinations
 
-1. Each router discovers its neighbors
-2. Routers create Link State Packets (LSPs) containing their neighbor information
-3. Routers flood these LSPs to their neighbors
-4. Each router builds a complete map of the network topology
-5. Routers compute the shortest paths using Dijkstra's algorithm
+3. **Main View**: Network topology visualization
+   - Drag routers to reposition them
+   - Visual packet animations showing LSP transmission
+   - Router highlighting when receiving packets
+
+## Real-World Application
+
+This simulator demonstrates core principles of routing protocols like OSPF (Open Shortest Path First):
+
+1. **Neighbor Discovery**: Routers exchange Hello packets to establish adjacencies
+2. **LSP Flooding**: Routers create and flood Link State Packets containing their adjacency information
+3. **LSDB Synchronization**: Each router maintains an identical Link State Database
+4. **Topology Changes**: When network topology changes, affected routers flood updated LSPs with incremented sequence numbers
+5. **Path Calculation**: Using Dijkstra's algorithm, routers compute optimal paths to all destinations
 
 ## Running the Project
 
@@ -53,6 +82,6 @@ Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
 ## Technologies Used
 
-- React 19
+- React 
 - GSAP for animations
 - JavaScript for routing algorithms

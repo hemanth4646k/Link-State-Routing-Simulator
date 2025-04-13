@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMode }) => {
+const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMode, selectionMode, moveMode }) => {
   const nodeRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
@@ -30,8 +30,8 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
     
     if (disabled) return;
     
-    // If in connect mode, just handle the click
-    if (connectMode) {
+    // If in connect mode or selection mode, just handle the click
+    if (connectMode || selectionMode) {
       onClick(id);
       return;
     }
@@ -84,8 +84,8 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
   const handleTouchStart = (e) => {
     if (disabled) return;
     
-    // If in connect mode, just handle the click/tap
-    if (connectMode) {
+    // If in connect mode or selection mode, just handle the click/tap
+    if (connectMode || selectionMode) {
       onClick(id);
       return;
     }
@@ -181,6 +181,16 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
     };
   };
   
+  // Get the appropriate cursor based on the current mode
+  const getCursor = () => {
+    if (disabled) return 'not-allowed';
+    if (connectMode || selectionMode) return 'pointer';
+    if (moveMode || !connectMode) {
+      return isDragging ? 'grabbing' : 'grab';
+    }
+    return 'default';
+  };
+  
   return (
     <div
       ref={nodeRef}
@@ -189,7 +199,7 @@ const RouterNode = ({ id, x, y, onDrag, onClick, isSelected, disabled, connectMo
       style={{
         left: `${x}px`,
         top: `${y}px`,
-        cursor: connectMode ? 'pointer' : disabled ? 'not-allowed' : isDragging ? 'grabbing' : 'grab',
+        cursor: getCursor(),
         ...getGlowStyles()
       }}
       onMouseDown={handleMouseDown}

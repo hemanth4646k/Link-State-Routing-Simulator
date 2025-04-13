@@ -243,10 +243,48 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   
   return (
     <div className="lsdb-panel">
+      <div className="panel-explainer">
+        {viewMode === 'lsdb' && (
+          <div className="info-box">
+            <p><strong>Link State Database (LSDB)</strong> contains each router's knowledge of the network topology.</p>
+            <p>Each row shows a router's neighbors and the cost to reach them.</p>
+          </div>
+        )}
+        
+        {viewMode === 'routingTable' && (
+          <div className="info-box">
+            <p><strong>Routing Table</strong> shows the best path to each destination.</p>
+            <p>Next = next hop router, Cost = total path cost to destination</p>
+          </div>
+        )}
+      </div>
+      
       <div className="database-section">
         {renderViewModeSelector()}
         {renderRouterSelector()}
         {renderContent()}
+        
+        <div className="legend">
+          {viewMode === 'lsdb' && (
+            <div className="legend-item">
+              <span className="adjacency-entry">X:Y</span> = Router X with link cost Y
+            </div>
+          )}
+          
+          {viewMode === 'routingTable' && (
+            <div className="legend-items">
+              <div className="legend-item">
+                <span className="legend-dest">Dest</span> = Destination router
+              </div>
+              <div className="legend-item">
+                <span className="legend-next">Next</span> = Next router in the path
+              </div>
+              <div className="legend-item">
+                <span className="legend-cost">Cost</span> = Total path cost
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

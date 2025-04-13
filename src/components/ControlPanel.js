@@ -23,6 +23,7 @@ const ControlPanel = ({
   
   // State for collapsible sections
   const [isInstructionsCollapsed, setIsInstructionsCollapsed] = useState(false);
+  const [isStepsGuideCollapsed, setIsStepsGuideCollapsed] = useState(false);
   
   const handleSpeedChange = (e) => {
     const newSpeed = parseFloat(e.target.value);
@@ -33,76 +34,127 @@ const ControlPanel = ({
     setIsInstructionsCollapsed(!isInstructionsCollapsed);
   };
   
+  const toggleStepsGuide = () => {
+    setIsStepsGuideCollapsed(!isStepsGuideCollapsed);
+  };
+  
   return (
     <div className="control-panel-container">
+      {/* Current Mode Indicator */}
+      <div className="current-mode-indicator">
+        <div className="current-mode">
+          <h4>Current Mode: {simulationStatus === 'idle' ? 'Setup' : simulationStatus.charAt(0).toUpperCase() + simulationStatus.slice(1)}</h4>
+          {isRunning && (
+            <div className="step-indicator">
+              <span>Current Step: {currentStep}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Quick Help */}
+      {simulationStatus === 'idle' && (
+        <div className="quick-help">
+          <p><strong>💡 Quick Start:</strong> Drag routers to the stage, connect them, then start simulation.</p>
+        </div>
+      )}
+      
+      {isRunning && (
+        <div className="quick-help">
+          <p><strong>💡 Next Step:</strong> Click the "Next Step" button to advance the simulation.</p>
+        </div>
+      )}
+      
+      {isPausedState && (
+        <div className="quick-help">
+          <p><strong>💡 Topology Edit:</strong> You can add/remove links or routers in this mode.</p>
+        </div>
+      )}
+      
       <div className="panel-section simulation-controls">
         <h3>Simulation Controls</h3>
         
-        <div className="button-container">
-          <button
-            onClick={onStartSimulation}
-            disabled={disabled || isRunning || isPausedState || isPaused}
-            className="primary-button"
-          >
-            Start Simulation
-          </button>
-          
-          {isRunning && (
-            <button 
-              onClick={onPauseSimulation} 
-              className="control-button"
-              disabled={isPaused}
+        {simulationStatus === 'idle' && (
+          <div className="button-container">
+            <button
+              onClick={onStartSimulation}
+              disabled={disabled}
+              className="primary-button"
             >
-              Pause
+              Start Simulation
             </button>
-          )}
-          
-          {isPausedState && (
-            <button onClick={onResumeSimulation} className="control-button">
-              Resume
+            {disabled && (
+              <div className="panel-message">
+                Add at least 2 routers and 1 link to start.
+              </div>
+            )}
+          </div>
+        )}
+        
+        {isRunning && (
+          <div className="button-container">
+            <div className="primary-action">
+              <button 
+                className="primary-button next-step-button"
+                onClick={onNextStep}
+                disabled={isPaused || animationInProgress}
+                title={animationInProgress ? "Wait for current animation to complete" : "Run the next step of the simulation"}
+              >
+                <span className="icon-step-forward">▶</span> Next Step
+              </button>
+              {animationInProgress && (
+                <div className="animation-status">Animation in progress...</div>
+              )}
+            </div>
+            
+            <div className="control-actions">
+              <button 
+                onClick={onPauseSimulation} 
+                className="control-button"
+                disabled={isPaused}
+              >
+                Pause
+              </button>
+              
+              <button 
+                onClick={onEndSimulation} 
+                className="control-button"
+                disabled={isPaused}
+              >
+                End Simulation
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {isPausedState && (
+          <div className="button-container">
+            <button onClick={onResumeSimulation} className="primary-button">
+              Resume Simulation
             </button>
-          )}
-          
-          {/* Next step button - only shown during simulation */}
-          <button 
-            className={`control-button next-step-button ${simulationStatus !== 'running' ? 'hidden' : ''}`}
-            onClick={onNextStep}
-            disabled={simulationStatus !== 'running' || isPaused || animationInProgress}
-            title={animationInProgress ? "Wait for current animation to complete" : "Run the next step of the simulation"}
-          >
-            <span className="icon-step-forward">▶</span> Next Step
-          </button>
-          
-          {(isRunning || isPausedState) && (
-            <button 
-              onClick={onEditTopology} 
-              className="control-button"
-              disabled={isPaused}
-            >
-              Edit Topology
-            </button>
-          )}
-          
-          {(isRunning || isPausedState) && (
+            
             <button 
               onClick={onEndSimulation} 
               className="control-button"
-              disabled={isPaused}
             >
               End Simulation
             </button>
-          )}
-          
-          {isCompleted && (
+          </div>
+        )}
+        
+        {isCompleted && (
+          <div className="button-container">
             <button 
               onClick={onResetSimulation} 
               className="reset-button"
-              disabled={isPaused}
             >
               Reset Simulation
             </button>
-          )}
-        </div>
+            <div className="panel-message success">
+              Simulation completed! View routing tables for each router.
+            </div>
+          </div>
+        )}
       </div>
       
       <div className="panel-section speed-controls">
@@ -126,12 +178,38 @@ const ControlPanel = ({
         </div>
       </div>
       
+      {isRunning && (
+        <div className="panel-section steps-guide">
+          <div 
+            className={`collapsible-header ${isStepsGuideCollapsed ? 'collapsed' : ''}`}
+            onClick={toggleStepsGuide}
+          >
+            <h4>Simulation Steps Guide</h4>
+            <span className="collapsible-icon">
+              {isStepsGuideCollapsed ? '►' : '▼'}
+            </span>
+          </div>
+          
+          <div className={`collapsible-content ${isStepsGuideCollapsed ? 'collapsed' : ''}`}>
+            <ul className="steps-guide-list">
+              <li><strong>Step 1:</strong> Routers discover neighbors via Hello packets</li>
+              <li><strong>Step 2-3:</strong> Routers create and flood LSPs with neighbor information</li>
+              <li><strong>Step 4+:</strong> LSPs are forwarded to all routers to build complete topology</li>
+              <li><strong>Final Steps:</strong> Routing tables are calculated using Dijkstra's algorithm</li>
+            </ul>
+            <div className="step-tip">
+              <p>💡 After link deletions, routers will flood new LSPs with incremented sequence numbers.</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="panel-section instructions">
         <div 
           className={`collapsible-header ${isInstructionsCollapsed ? 'collapsed' : ''}`}
           onClick={toggleInstructions}
         >
-          <h4>Instructions</h4>
+          <h4>How to Use</h4>
           <span className="collapsible-icon">
             {isInstructionsCollapsed ? '►' : '▼'}
           </span>
@@ -139,28 +217,15 @@ const ControlPanel = ({
         
         <div className={`collapsible-content ${isInstructionsCollapsed ? 'collapsed' : ''}`}>
           <ul className="instructions-list">
-            <li>Drag routers to position them in 3D space</li>
-            <li>Use camera controls to rotate and zoom the view</li>
-            <li>Click "Connect Routers" to add links</li>
-            <li>Use "Selection Mode" to delete elements</li>
-            <li>Start simulation to see routing in action</li>
-            <li>Use "Next Step" to advance the simulation one step</li>
-            <li>Use "Edit Topology" to modify the network during simulation</li>
+            <li><strong>Setup:</strong> Drag routers to position them on the stage</li>
+            <li><strong>Connect:</strong> Click "Connect Routers" button, then click two routers</li>
+            <li><strong>Start:</strong> Click "Start Simulation" to begin the routing protocol</li>
+            <li><strong>Next Steps:</strong> Click "Next Step" repeatedly to progress through the simulation</li>
+            <li><strong>Editing:</strong> Pause simulation, then use "Select" mode to delete elements</li>
+            <li><strong>View Data:</strong> Use the right panel to view LSDB and routing tables</li>
           </ul>
         </div>
       </div>
-      
-      {simulationStatus === 'idle' && disabled && (
-        <div className="panel-message">
-          Add at least 2 routers and 1 link to start the simulation.
-        </div>
-      )}
-      
-      {simulationStatus === 'completed' && (
-        <div className="panel-message success">
-          Simulation completed! View routing tables for each router.
-        </div>
-      )}
     </div>
   );
 };
