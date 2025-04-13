@@ -1,527 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Html, useGLTF } from '@react-three/drei';
+import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-
-// Router component - represents a 3D router node
-const Router = ({ id, position, isSelected, onClick, disabled, connectMode, onDrag, selectionMode, moveMode }) => {
-  const meshRef = useRef();
-  const groupRef = useRef();
-  const [hovered, setHovered] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [glowEffect, setGlowEffect] = useState(null); // 'accept', 'reject', or 'receive'
-  const dragPointerId = useRef(null);
-  
-  // Function to make router glow with appropriate color
-  const glow = (effect) => {
-    // Set glow effect state based on the type of effect
-    setGlowEffect(effect);
-    
-    // Clear glow effect after 200ms
-    setTimeout(() => {
-      setGlowEffect(null);
-    }, 200);
-  };
-  
-  // Expose the glow function via ref
-  useEffect(() => {
-    // Create a global reference to this router by ID for the animation effects
-    window[`router3D_${id}`] = {
-      glow: glow
-    };
-    
-    // Cleanup function
-    return () => {
-      delete window[`router3D_${id}`];
-    };
-  }, [id]);
-  
-  // Use a simple sphere for the router model
-  useEffect(() => {
-    if (meshRef.current) {
-      if (isSelected) {
-        meshRef.current.material.color.set('#e74c3c'); // Red color for selected
-      } else if (hovered) {
-        meshRef.current.material.color.set('#2ecc71'); // Green color for hover
-      } else {
-        meshRef.current.material.color.set('#3498db'); // Default blue color
-      }
-    }
-  }, [isSelected, hovered]);
-  
-  // Update glow effect
-  useEffect(() => {
-    if (!meshRef.current) return;
-    
-    if (glowEffect) {
-      // Create glow effect based on type
-      switch(glowEffect) {
-        case 'accept':
-          // Green glow for acceptance
-          meshRef.current.material.emissive.set('#2ecc71');
-          meshRef.current.material.emissiveIntensity = 2.0;
-          break;
-        case 'reject':
-          // Red glow for rejection
-          meshRef.current.material.emissive.set('#e74c3c');
-          meshRef.current.material.emissiveIntensity = 2.0;
-          break;
-        case 'receive':
-          // Blue glow for packet reception
-          meshRef.current.material.emissive.set('#3498db');
-          meshRef.current.material.emissiveIntensity = 2.0;
-          break;
-        default:
-          // Reset glow effect
-          meshRef.current.material.emissive.set('#204060');
-          meshRef.current.material.emissiveIntensity = 0.3;
-      }
-    } else {
-      // Reset glow effect
-      meshRef.current.material.emissive.set('#204060');
-      meshRef.current.material.emissiveIntensity = 0.3;
-    }
-  }, [glowEffect]);
-  
-  // Get Three.js context
-  const { camera, raycaster, mouse, gl } = useThree();
-  
-  // Variables for dragging
-  const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
-  const dragOffset = useRef(new THREE.Vector3());
-  
-  // Method to start dragging
-  const startDragging = (e) => {
-    // Only allow dragging in moveMode (and don't require preselection anymore)
-    if (!moveMode) return;
-    
-    // Prevent event propagation
-    e.stopPropagation();
-    setIsDragging(true);
-    
-    // Set cursor style
-    gl.domElement.style.cursor = 'grabbing';
-    
-    // Capture the pointer to ensure we get all events even when the mouse moves quickly
-    if (e.pointerId) {
-      dragPointerId.current = e.pointerId;
-      gl.domElement.setPointerCapture(e.pointerId);
-    }
-    
-    // Update mouse coordinates for raycaster
-    raycaster.setFromCamera(mouse, camera);
-    
-    // Create a drag plane perpendicular to the camera direction
-    const cameraDirection = new THREE.Vector3();
-    camera.getWorldDirection(cameraDirection);
-    
-    // Use a plane perpendicular to the camera view for more intuitive dragging
-    dragPlane.current.normal.copy(cameraDirection);
-    
-    // Position the plane at the router's position
-    const routerPosition = new THREE.Vector3(...position);
-    dragPlane.current.constant = -routerPosition.dot(cameraDirection);
-    
-    // Find the intersection with the plane
-    const intersection = new THREE.Vector3();
-    if (raycaster.ray.intersectPlane(dragPlane.current, intersection)) {
-      // Calculate drag offset
-      dragOffset.current.copy(intersection).sub(routerPosition);
-    }
-    
-    // Add event listeners for drag and release
-    gl.domElement.addEventListener('pointermove', handleDrag);
-    gl.domElement.addEventListener('pointerup', stopDragging);
-    gl.domElement.addEventListener('pointerleave', stopDragging);
-    gl.domElement.addEventListener('pointercancel', stopDragging);
-  };
-  
-  // Method to handle dragging movement
-  const handleDrag = (e) => {
-    if (!isDragging) return;
-    
-    // Update the raycaster with current mouse position
-    raycaster.setFromCamera(mouse, camera);
-    
-    // Find the new intersection with the drag plane
-    const intersection = new THREE.Vector3();
-    if (raycaster.ray.intersectPlane(dragPlane.current, intersection)) {
-      // Calculate new position by subtracting the offset
-      const newPosition = new THREE.Vector3().copy(intersection).sub(dragOffset.current);
-      
-      // Update position via parent component with all coordinates
-      onDrag(id, newPosition.x, newPosition.y, newPosition.z);
-    }
-  };
-  
-  // Method to stop dragging
-  const stopDragging = (e) => {
-    if (!isDragging) return;
-    
-    setIsDragging(false);
-    gl.domElement.style.cursor = 'grab';
-    
-    // Remove event listeners
-    gl.domElement.removeEventListener('pointermove', handleDrag);
-    gl.domElement.removeEventListener('pointerup', stopDragging);
-    gl.domElement.removeEventListener('pointerleave', stopDragging);
-    gl.domElement.removeEventListener('pointercancel', stopDragging);
-    
-    // Release pointer capture using our stored pointerId
-    if (dragPointerId.current !== null) {
-      try {
-        gl.domElement.releasePointerCapture(dragPointerId.current);
-      } catch (err) {
-        // Ignore errors if the pointer was already released
-      }
-      dragPointerId.current = null;
-    }
-  };
-  
-  // Handle all pointer interactions
-  const handlePointerDown = (e) => {
-    // If disabled and not in selection/connect/move mode, do nothing
-    if (disabled && !selectionMode && !connectMode && !moveMode) return;
-    
-    // Important: stop propagation for all pointer events
-    e.stopPropagation();
-    
-    // In connect mode, just register click
-    if (connectMode) {
-      onClick(id);
-      return;
-    }
-    
-    // In selection mode
-    if (selectionMode) {
-      // Just select the router (no dragging in selection/delete mode)
-      onClick(id);
-      return;
-    }
-    
-    // In move mode
-    if (moveMode) {
-      // Always click to select first
-      onClick(id);
-      
-      // Then start dragging immediately
-      // Add a small timeout to ensure selection state is updated first
-      setTimeout(() => {
-        startDragging(e);
-      }, 0);
-      
-      return;
-    }
-    
-    // Regular click in normal mode
-    onClick(id);
-  };
-  
-  // Clean up event listeners when component unmounts or when dragging state changes
-  useEffect(() => {
-    return () => {
-      if (isDragging) {
-        gl.domElement.removeEventListener('pointermove', handleDrag);
-        gl.domElement.removeEventListener('pointerup', stopDragging);
-        gl.domElement.removeEventListener('pointerleave', stopDragging);
-        gl.domElement.removeEventListener('pointercancel', stopDragging);
-      }
-    };
-  }, [isDragging]);
-  
-  return (
-    <group 
-      ref={groupRef}
-      position={position}
-      onPointerOver={() => !disabled && setHovered(true)}
-      onPointerOut={() => !disabled && setHovered(false)}
-      onPointerDown={handlePointerDown}
-    >
-      {/* 3D Sphere representing the router */}
-      <mesh 
-        ref={meshRef} 
-        castShadow 
-        receiveShadow
-      >
-        <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial 
-          color="#3498db" 
-          roughness={0.3} 
-          metalness={0.7}
-          emissive="#204060"
-          emissiveIntensity={0.3}
-          transparent={true} 
-          opacity={0.9} // Slightly transparent to see text better
-        />
-      </mesh>
-      
-      {/* HTML overlay for router ID - billboarded to always face camera */}
-      <Html 
-        position={[0, 0, 0]} 
-        center 
-        transform 
-        sprite // This makes the HTML element always face the camera
-        distanceFactor={8} // Scale with distance from camera
-        zIndexRange={[100, 0]} // Ensure visibility 
-        style={{
-          pointerEvents: 'none' // Make sure click events pass through to the router
-        }}
-      >
-        <div style={{
-          backgroundColor: isSelected ? '#e74c3c' : 'rgba(0,0,0,0.6)',
-          color: 'white',
-          padding: '2px 8px',
-          borderRadius: '16px',
-          fontWeight: 'bold',
-          fontSize: '16px',
-          whiteSpace: 'nowrap',
-          userSelect: 'none',
-          textAlign: 'center',
-          width: '30px',
-          height: '30px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 0 8px rgba(0,0,0,0.8)',
-          border: '2px solid rgba(255,255,255,0.7)'
-        }}>
-          {id}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-// Link component - represents a connection between routers
-const Link = ({ source, target, cost, isSelected, onClick, id }) => {
-  const linkRef = useRef();
-  const [hovered, setHovered] = useState(false);
-  
-  // Calculate midpoint for the cost label
-  const midpoint = [
-    (source[0] + target[0]) / 2,
-    (source[1] + target[1]) / 2 + 0.5, // Higher above the link for better visibility
-    (source[2] + target[2]) / 2
-  ];
-  
-  // Calculate line points and add slight elevation to make it more visible
-  const points = [
-    new THREE.Vector3(source[0], source[1] + 0.1, source[2]),
-    new THREE.Vector3(target[0], target[1] + 0.1, target[2])
-  ];
-  
-  // Create geometry from points
-  const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-  
-  // Update color based on selection and hover states
-  useEffect(() => {
-    if (linkRef.current) {
-      if (isSelected) {
-        linkRef.current.material.color.set('#e74c3c'); // Red for selected
-        linkRef.current.material.linewidth = 3; // Thicker when selected
-      } else if (hovered) {
-        linkRef.current.material.color.set('#f39c12'); // Orange for hover
-        linkRef.current.material.linewidth = 2.5; // Slightly thicker on hover
-      } else {
-        linkRef.current.material.color.set('#4cc9f0'); // Brighter blue for better visibility
-        linkRef.current.material.linewidth = 2; // Default thickness
-      }
-    }
-  }, [isSelected, hovered]);
-  
-  return (
-    <group>
-      {/* Link line */}
-      <line 
-        ref={linkRef}
-        geometry={lineGeometry}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          onClick(id);
-        }}
-      >
-        <lineBasicMaterial 
-          color="#4cc9f0" 
-          linewidth={2} 
-          linecap="round" 
-          linejoin="round"
-        />
-      </line>
-      
-      {/* Cost label as HTML - always face camera */}
-      <Html position={midpoint} center transform sprite distanceFactor={8}>
-        <div 
-          style={{ 
-            background: isSelected ? '#e74c3c' : '#fff',
-            color: isSelected ? '#fff' : '#333',
-            borderRadius: '50%',
-            width: '28px',
-            height: '28px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            boxShadow: '0 0 8px rgba(0,0,0,0.5)',
-            userSelect: 'none',
-            pointerEvents: 'none',
-            border: '2px solid rgba(255,255,255,0.7)'
-          }}
-        >
-          {cost}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-// Packet component - represents a data packet traveling between routers
-const Packet = ({ id, position, type, data }) => {
-  const meshRef = useRef();
-  
-  // Get display text
-  const getDisplayText = () => {
-    if (type === 'hello') {
-      return 'Hello';
-    }
-    
-    if (type === 'lsp') {
-      // For the new format: "LSP-A-2" - return it exactly as is
-      if (typeof data === 'string' && data.match(/LSP-[A-Z]-\d+/)) {
-        return data; // Return the exact string
-      }
-      // For old array format: [routerId, adjList]
-      else if (Array.isArray(data) && data.length >= 1) {
-        return `LSP-${data[0]}`; // Format as LSP-X without sequence
-      }
-      // For old string format: "LSPA: ["B","C"]"
-      else if (typeof data === 'string' && data.includes('LSP')) {
-        const match = data.match(/LSP([A-Z])/);
-        if (match && match[1]) {
-          return `LSP-${match[1]}`; // Format as LSP-X without sequence
-        }
-      }
-    }
-    
-    return 'LSP';
-  };
-  
-  // Set color based on packet type
-  const packetColor = type === 'hello' ? '#f1c40f' : '#9b59b6';
-  const displayText = getDisplayText();
-  
-  return (
-    <group position={position}>
-      {/* 3D sphere for the packet */}
-      <mesh ref={meshRef} castShadow>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial 
-          color={packetColor} 
-          emissive={packetColor} 
-          emissiveIntensity={0.5}
-          roughness={0.3} 
-          metalness={0.7}
-          transparent={true}
-          opacity={0.85} // Slightly transparent to see text
-        />
-      </mesh>
-      
-      {/* HTML overlay for packet label - always face camera */}
-      <Html position={[0, 0, 0]} center transform sprite distanceFactor={10}>
-        <div style={{
-          backgroundColor: type === 'hello' ? 'rgba(241,196,15,0.8)' : 'rgba(155,89,182,0.8)',
-          color: 'white',
-          padding: '3px 8px',
-          borderRadius: '12px', 
-          fontSize: '12px',
-          fontWeight: 'bold',
-          whiteSpace: 'nowrap',
-          userSelect: 'none',
-          pointerEvents: 'none',
-          boxShadow: '0 0 8px rgba(0,0,0,0.5)',
-          border: '1px solid rgba(255,255,255,0.7)',
-          textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-        }}>
-          {displayText}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-// Camera controls component
-const CameraController = ({ disabled, selectionMode, moveMode, simulationRunning }) => {
-  const { camera, gl } = useThree();
-  const controls = useRef();
-  
-  useEffect(() => {
-    // Set up camera for better view of the scene
-    camera.position.set(0, 18, 18);
-    camera.lookAt(0, 0, 0);
-    camera.updateProjectionMatrix();
-    
-    return () => {
-      if (controls.current) {
-        controls.current.dispose();
-      }
-    };
-  }, [camera]);
-  
-  // Update control state based on props
-  useEffect(() => {
-    if (!controls.current) return;
-    
-    // Allow controls during simulation regardless of disabled state
-    // But respect selection mode
-    const shouldEnableControls = simulationRunning || !disabled;
-    controls.current.enabled = shouldEnableControls;
-    
-    // In selection mode or move mode, disable rotation/pan but allow zoom
-    if (selectionMode || moveMode) {
-      controls.current.enableRotate = false;
-      controls.current.enablePan = false;
-      controls.current.enableZoom = true;
-    } else {
-      // Enable rotation and pan when not in selection or move mode
-      controls.current.enableRotate = true;
-      controls.current.enablePan = true;
-      controls.current.enableZoom = true;
-    }
-    
-    // Configure zoom limits
-    controls.current.minDistance = 2;
-    controls.current.maxDistance = 100;
-    controls.current.maxPolarAngle = Math.PI * 0.85;
-    
-    // Increase zoom speed for better usability
-    controls.current.zoomSpeed = 1.5;
-    
-    // Damping and rotation speed adjustments
-    controls.current.enableDamping = true;
-    controls.current.dampingFactor = 0.1;
-    controls.current.rotateSpeed = 0.8;
-  }, [disabled, selectionMode, moveMode, simulationRunning]);
-  
-  return (
-    <OrbitControls
-      ref={controls}
-      args={[camera, gl.domElement]}
-      enableRotate={!(selectionMode || moveMode)}
-      enablePan={!(selectionMode || moveMode)}
-      enableZoom={true}
-      minDistance={2}
-      maxDistance={100}
-      minPolarAngle={0}
-      maxPolarAngle={Math.PI * 0.85}
-      zoomSpeed={1.5}
-      dampingFactor={0.1}
-      enableDamping={true}
-      rotateSpeed={0.8}
-    />
-  );
-};
+import Router3D from './Router3D';
+import Link3D from './Link3D';
+import Packet3D from './Packet3D';
+import CameraController from './CameraController';
+import DropMarker from './DropMarker';
 
 // Main ThreeScene component
 const ThreeScene = ({ 
@@ -537,14 +21,19 @@ const ThreeScene = ({
   connectMode,
   selectionMode,
   moveMode,
-  simulationStatus
+  simulationStatus,
+  isDraggingRouter,
+  dropIndicatorPos
 }) => {
-  // Track if simulation is running to enable controls during animation
-  const simulationRunning = simulationStatus === 'running';
-  
   // Reference to the canvas for position calculations
   const canvasRef = useRef(null);
-
+  // Add state for drop marker
+  const [showDropMarker, setShowDropMarker] = useState(false);
+  const [dropMarkerPosition, setDropMarkerPosition] = useState([0, 0, 0]);
+  
+  // Track if simulation is running to enable controls during animation
+  const isSimulationRunning = simulationStatus === 'running';
+  
   // Convert 2D coordinates to 3D space for horizontal plane (x-z plane, y is up)
   const to3DCoordinates = (x, y) => {
     // Scale appropriately for the 3D scene
@@ -554,6 +43,53 @@ const ThreeScene = ({
     
     return [(x - offsetX) / scale, 0, (y - offsetY) / scale];
   };
+
+  // Convert 3D coordinates back to 2D for accurate positioning
+  const to2DCoordinates = (x, y, z) => {
+    const scale = 30;
+    const offsetX = 500; 
+    const offsetY = 500;
+    
+    return [x * scale + offsetX, z * scale + offsetY];
+  };
+  
+  // Add handler for stage hover to show drop marker
+  const handleCanvasPointerMove = (e) => {
+    if (disabled || isSimulationRunning) return;
+    
+    // Get canvas bounds
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    
+    // Calculate relative position within canvas
+    const x = e.clientX - canvasRect.left;
+    const y = e.clientY - canvasRect.top;
+    
+    // Update drop marker position
+    const pos3D = to3DCoordinates(x, y);
+    setDropMarkerPosition(pos3D);
+    
+    // Show the drop marker when not over a router
+    setShowDropMarker(true);
+  };
+  
+  // Add handler to hide marker when pointer leaves
+  const handleCanvasPointerLeave = () => {
+    setShowDropMarker(false);
+  };
+  
+  // Set up event listeners for canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.addEventListener('pointermove', handleCanvasPointerMove);
+      canvas.addEventListener('pointerleave', handleCanvasPointerLeave);
+      
+      return () => {
+        canvas.removeEventListener('pointermove', handleCanvasPointerMove);
+        canvas.removeEventListener('pointerleave', handleCanvasPointerLeave);
+      };
+    }
+  }, [disabled, isSimulationRunning]);
   
   // Handle router click
   const handleRouterClick = (id) => {
@@ -603,7 +139,7 @@ const ThreeScene = ({
       const targetPos = to3DCoordinates(target.x, target.y);
       
       return (
-        <Link
+        <Link3D
           key={link.id}
           id={link.id}
           source={sourcePos}
@@ -628,12 +164,12 @@ const ThreeScene = ({
       canvas.style.cursor = 'grab';
     } else if (connectMode) {
       canvas.style.cursor = 'crosshair';
-    } else if (disabled && !simulationRunning) {
+    } else if (disabled && !isSimulationRunning) {
       canvas.style.cursor = 'default';
     } else {
       canvas.style.cursor = 'grab';
     }
-  }, [selectionMode, moveMode, connectMode, disabled, simulationRunning]);
+  }, [selectionMode, moveMode, connectMode, disabled, isSimulationRunning]);
   
   return (
     <div 
@@ -660,7 +196,7 @@ const ThreeScene = ({
           disabled={disabled} 
           selectionMode={selectionMode} 
           moveMode={moveMode}
-          simulationRunning={simulationRunning}
+          simulationRunning={isSimulationRunning}
         />
         
         {/* Grid for visual reference - no rotation for horizontal layout */}
@@ -674,7 +210,7 @@ const ThreeScene = ({
         
         {/* Render routers */}
         {routers.map(router => (
-          <Router
+          <Router3D
             key={router.id}
             id={router.id}
             position={to3DCoordinates(router.x, router.y)}
@@ -685,7 +221,7 @@ const ThreeScene = ({
             }
             onClick={handleRouterClick}
             onDrag={handleRouterDrag}
-            disabled={disabled && !simulationRunning && !selectionMode && !connectMode && !moveMode}
+            disabled={disabled && !isSimulationRunning && !selectionMode && !connectMode && !moveMode}
             connectMode={connectMode}
             selectionMode={selectionMode}
             moveMode={moveMode}
@@ -694,7 +230,7 @@ const ThreeScene = ({
         
         {/* Render packets */}
         {packets.map(packet => (
-          <Packet
+          <Packet3D
             key={packet.id}
             id={packet.id}
             position={to3DCoordinates(packet.x, packet.y)}
@@ -702,6 +238,11 @@ const ThreeScene = ({
             data={packet.data}
           />
         ))}
+        
+        {/* Render drop marker only when dragging a router from toolbox */}
+        {isDraggingRouter && dropIndicatorPos && (
+          <DropMarker position={to3DCoordinates(dropIndicatorPos.x, dropIndicatorPos.y)} />
+        )}
       </Canvas>
       
       {/* Selection mode indicator overlay */}

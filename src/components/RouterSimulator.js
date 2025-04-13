@@ -43,6 +43,9 @@ const RouterSimulator = () => {
   // First, add a new state for moveMode around line 40 where other state variables are defined
   const [moveMode, setMoveMode] = useState(false);
   
+  const [isDraggingRouter, setIsDraggingRouter] = useState(false);
+  const [dropIndicatorPos, setDropIndicatorPos] = useState({ x: 0, y: 0 });
+  
   const stageRef = useRef(null);
   const nextRouterId = useRef(65); // ASCII for 'A'
   
@@ -58,17 +61,53 @@ const RouterSimulator = () => {
     const x = e.clientX - stageRect.left;
     const y = e.clientY - stageRect.top;
     
+    // Account for the coordinate conversion that happens in ThreeScene
+    // This ensures the router is placed exactly where it's dropped
+    const scale = 30;
+    const offsetX = 500;
+    const offsetY = 500;
+    
+    // Apply the inverse of the ThreeScene conversion
+    const correctedX = ((x - offsetX) / scale) * scale + offsetX;
+    const correctedY = ((y - offsetY) / scale) * scale + offsetY;
+    
     // Create new router with unique ID
     const newRouter = {
       id: String.fromCharCode(nextRouterId.current),
-      x,
-      y,
+      x: correctedX,
+      y: correctedY,
       lsdb: {},
       routingTable: {}
     };
     
     setRouters([...routers, newRouter]);
     nextRouterId.current += 1;
+    
+    // Reset dragging state
+    setIsDraggingRouter(false);
+  };
+  
+  // Handle router drag start from toolbox
+  const handleRouterDragStart = (e) => {
+    if (simulationStatus === 'running') return;
+    setIsDraggingRouter(true);
+  };
+  
+  // Handle router drag over the stage
+  const handleRouterDragOver = (e) => {
+    if (!isDraggingRouter || simulationStatus === 'running') return;
+    e.preventDefault(); // Necessary to allow dropping
+    
+    const stageRect = stageRef.current.getBoundingClientRect();
+    const x = e.clientX - stageRect.left;
+    const y = e.clientY - stageRect.top;
+    
+    setDropIndicatorPos({ x, y });
+  };
+  
+  // Handle router drag end (for cases where the drop is outside the target area)
+  const handleRouterDragEnd = () => {
+    setIsDraggingRouter(false);
   };
   
   // Handle router dragging on the stage
@@ -2580,7 +2619,8 @@ const RouterSimulator = () => {
             <div
               className="router-template"
               draggable
-              onDragEnd={handleRouterDrop}
+              onDragStart={handleRouterDragStart}
+              onDragEnd={handleRouterDragEnd}
               style={{ pointerEvents: 'auto' }}
             >
               Drag to add Router
@@ -2675,6 +2715,8 @@ const RouterSimulator = () => {
           <div 
             className={`simulator-stage ${selectionMode || moveMode ? 'selection-mode-active' : ''}`}
             ref={stageRef}
+            onDragOver={handleRouterDragOver}
+            onDrop={handleRouterDrop}
           >
             <ThreeScene
               routers={routers}
@@ -2690,6 +2732,8 @@ const RouterSimulator = () => {
               selectionMode={selectionMode}
               moveMode={moveMode}
               simulationStatus={simulationStatus}
+              isDraggingRouter={isDraggingRouter}
+              dropIndicatorPos={dropIndicatorPos}
             />
           </div>
           
