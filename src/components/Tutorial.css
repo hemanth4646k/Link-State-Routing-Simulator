@@ -19,6 +19,11 @@
   background-color: rgba(0, 0, 0, 0.7);
 }
 
+/* Add a special z-index for the fullscreen tutorial overlay */
+.tutorial-overlay.fullscreen {
+  z-index: 10000;
+}
+
 .tutorial-highlight {
   position: absolute;
   z-index: 9998;
@@ -26,6 +31,12 @@
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
   border: 2px solid var(--accent-color, #4cc9f0);
   pointer-events: none;
+  background-color: transparent; /* Ensure the highlighted area is transparent */
+}
+
+/* Add a special z-index for the fullscreen tutorial highlight */
+.tutorial-highlight.fullscreen {
+  z-index: 10001;
 }
 
 .tutorial-tooltip {
@@ -99,89 +110,3 @@
 .tooltip-skip-button:hover {
   color: var(--primary-text, #e6f1ff);
 }
-
-.tutorial-animation {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 10000;
-}
-
-.animation-dot {
-  position: absolute;
-  width: 15px;
-  height: 15px;
-  background-color: var(--accent-color, #4cc9f0);
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgba(76, 201, 240, 0.6);
-  transform: translate(-50%, -50%);
-  animation: pulse 1.5s infinite;
-}
-
-.click-animation .animation-dot {
-  top: 50%;
-  left: 50%;
-  animation: clickAnimation 2s infinite;
-}
-
-.drag-animation .animation-dot {
-  top: 50%;
-  left: 50%;
-  animation: dragAnimation 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: translate(-50%, -50%) scale(0.8);
-    opacity: 0.7;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(0.8);
-    opacity: 0.7;
-  }
-}
-
-@keyframes clickAnimation {
-  0%, 100% {
-    transform: translate(-50%, -50%) scale(0.8);
-    opacity: 0.7;
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  90% {
-    transform: translate(-50%, -50%) scale(0.3);
-    opacity: 0.7;
-  }
-}
-
-@keyframes dragAnimation {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  25% {
-    transform: translate(50px, 20px) scale(1.2);
-    opacity: 0.9;
-  }
-  50% {
-    transform: translate(100px, 0px) scale(1);
-    opacity: 1;
-  }
-  75% {
-    transform: translate(50px, -20px) scale(0.8);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-} 

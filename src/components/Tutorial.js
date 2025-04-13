@@ -8,7 +8,6 @@ const Tutorial = ({ onComplete }) => {
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
   const [highlightPosition, setHighlightPosition] = useState({ top: 0, left: 0, width: 0, height: 0 });
   const tooltipRef = useRef(null);
-  const animationRef = useRef(null);
 
   // Define all tutorial steps
   const tutorialSteps = [
@@ -27,29 +26,27 @@ const Tutorial = ({ onComplete }) => {
     {
       target: '.simulator-stage',
       content: 'This is the Network Graph area with a 3D interface. Here you can create and view your network topology.',
-      position: 'right',
-      highlight: true
+      position: 'center',
+      highlight: true,
+      fullOverlay: true
     },
     {
       target: '.router-template',
       content: 'Drag this template to add a new router to your network. Try adding at least two routers!',
       position: 'bottom',
-      highlight: true,
-      animation: 'drag'
+      highlight: true
     },
     {
       target: 'button:contains("Move Elements")',
       content: 'Need to reposition routers? Click this button to enter Move Mode. In Move Mode, you can easily click and drag any router to reposition it.',
       position: 'bottom',
-      highlight: true,
-      animation: 'click'
+      highlight: true
     },
     {
       target: 'button:contains("Connect Routers")',
       content: 'After adding routers, click this button to connect them. Then select two routers to create a link between them.',
       position: 'bottom',
-      highlight: true,
-      animation: 'click'
+      highlight: true
     },
     {
       target: '.control-panel-container',
@@ -108,7 +105,7 @@ const Tutorial = ({ onComplete }) => {
   ];
 
   // Get current step
-  const currentTutorialStep = tutorialSteps[currentStep];
+  const currentTutorialStep = tutorialSteps[currentStep] || {};
 
   // Handle next step
   const handleNextStep = () => {
@@ -132,7 +129,6 @@ const Tutorial = ({ onComplete }) => {
     if (onComplete) onComplete();
   };
 
-  // Position the tooltip and highlight based on the target element
   useEffect(() => {
     console.log('Tutorial useEffect - isVisible:', isVisible, 'currentStep:', currentStep);
     if (!isVisible) return;
@@ -177,6 +173,9 @@ const Tutorial = ({ onComplete }) => {
 
       console.log('Target element found:', targetElement);
       
+      // Special case for simulator-stage (network graph area)
+      const isSimulatorStage = step.target === '.simulator-stage';
+      
       // Get the target element's position and dimensions
       const targetRect = targetElement.getBoundingClientRect();
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -198,8 +197,16 @@ const Tutorial = ({ onComplete }) => {
         let top, left;
 
         if (step.position === 'center') {
-          top = window.innerHeight / 2 - tooltipRect.height / 2;
-          left = window.innerWidth / 2 - tooltipRect.width / 2;
+          // For simulator-stage or other center-positioned tooltips
+          if (isSimulatorStage) {
+            // Position in center of the simulator stage
+            top = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2 + scrollTop;
+            left = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2 + scrollLeft;
+          } else {
+            // Position in center of screen
+            top = window.innerHeight / 2 - tooltipRect.height / 2;
+            left = window.innerWidth / 2 - tooltipRect.width / 2;
+          }
         } else {
           switch (step.position) {
             case 'top':
@@ -233,18 +240,6 @@ const Tutorial = ({ onComplete }) => {
 
         setTooltipPosition({ top, left });
       }
-
-      // Set up animation if needed
-      if (step.animation && animationRef.current) {
-        if (step.animation === 'click') {
-          animationRef.current.style.top = `${targetRect.top + targetRect.height / 2}px`;
-          animationRef.current.style.left = `${targetRect.left + targetRect.width / 2}px`;
-        } else if (step.animation === 'drag') {
-          // For drag animation, position start point on the element
-          animationRef.current.style.top = `${targetRect.top + targetRect.height / 2}px`;
-          animationRef.current.style.left = `${targetRect.left + targetRect.width / 2}px`;
-        }
-      }
     };
 
     // Call once immediately to avoid flicker
@@ -260,6 +255,52 @@ const Tutorial = ({ onComplete }) => {
     };
   }, [currentStep, isVisible, tutorialSteps]);
 
+  // Add an effect that will directly manipulate DOM elements when showing simulator-stage
+  useEffect(() => {
+    // Only run this effect for the simulator-stage step
+    if (isVisible && currentTutorialStep.target === '.simulator-stage') {
+      console.log('Applying direct DOM manipulations for simulator-stage');
+      
+      // Directly target the elements we want to darken
+      const toolbox = document.querySelector('.toolbox');
+      const leftPanel = document.querySelector('.left-panel');
+      const rightPanel = document.querySelector('.right-panel');
+      const leftToggle = document.querySelector('.left-panel-toggle');
+      const rightToggle = document.querySelector('.right-panel-toggle');
+      
+      // Add a class to all these elements
+      [toolbox, leftPanel, rightPanel, leftToggle, rightToggle].forEach(el => {
+        if (el) {
+          el.classList.add('tutorial-darkened');
+        }
+      });
+      
+      // Create a style tag for our custom class if it doesn't exist
+      let styleTag = document.getElementById('tutorial-styles');
+      if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'tutorial-styles';
+        styleTag.innerHTML = `
+          .tutorial-darkened {
+            opacity: 0.1 !important;
+            pointer-events: none !important;
+            z-index: 1 !important;
+          }
+        `;
+        document.head.appendChild(styleTag);
+      }
+      
+      return () => {
+        // Remove the class when this effect is cleaned up
+        [toolbox, leftPanel, rightPanel, leftToggle, rightToggle].forEach(el => {
+          if (el) {
+            el.classList.remove('tutorial-darkened');
+          }
+        });
+      };
+    }
+  }, [isVisible, currentStep, tutorialSteps, currentTutorialStep]);
+
   console.log('Tutorial before return, isVisible:', isVisible);
   if (!isVisible) return null;
   
@@ -273,20 +314,99 @@ const Tutorial = ({ onComplete }) => {
 
   return (
     <div className="tutorial-container">
-      {/* Overlay */}
-      <div className="tutorial-overlay"></div>
+      {/* Overlay - Only show if not highlighting a specific component */}
+      {!currentTutorialStep.highlight && (
+        <div className="tutorial-overlay"></div>
+      )}
       
-      {/* Highlighted area */}
+      {/* Highlighted area with special handling */}
       {currentTutorialStep.highlight && highlightPosition.width > 0 && (
-        <div 
-          className="tutorial-highlight" 
-          style={{
-            top: `${highlightPosition.top}px`,
-            left: `${highlightPosition.left}px`,
-            width: `${highlightPosition.width}px`,
-            height: `${highlightPosition.height}px`
-          }}
-        ></div>
+        <>
+          {/* For simulator-stage and other special components, use a completely different approach */}
+          {currentTutorialStep.fullOverlay ? (
+            // This approach uses four separate overlays to cover everything except the highlighted area
+            <>
+              {/* Top overlay */}
+              <div className="tutorial-overlay" style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: `${highlightPosition.top}px`,
+                pointerEvents: 'auto'
+              }}></div>
+              
+              {/* Bottom overlay */}
+              <div className="tutorial-overlay" style={{
+                position: 'fixed',
+                top: `${highlightPosition.top + highlightPosition.height}px`,
+                left: 0,
+                width: '100%',
+                height: `${window.innerHeight - (highlightPosition.top + highlightPosition.height)}px`,
+                pointerEvents: 'auto'
+              }}></div>
+              
+              {/* Left overlay */}
+              <div className="tutorial-overlay" style={{
+                position: 'fixed',
+                top: `${highlightPosition.top}px`,
+                left: 0,
+                width: `${highlightPosition.left}px`,
+                height: `${highlightPosition.height}px`,
+                pointerEvents: 'auto'
+              }}></div>
+              
+              {/* Right overlay */}
+              <div className="tutorial-overlay" style={{
+                position: 'fixed',
+                top: `${highlightPosition.top}px`,
+                left: `${highlightPosition.left + highlightPosition.width}px`,
+                width: `${window.innerWidth - (highlightPosition.left + highlightPosition.width)}px`,
+                height: `${highlightPosition.height}px`,
+                pointerEvents: 'auto'
+              }}></div>
+              
+              {/* Highlighted area border */}
+              <div 
+                className="tutorial-highlight" 
+                style={{
+                  top: `${highlightPosition.top}px`,
+                  left: `${highlightPosition.left}px`,
+                  width: `${highlightPosition.width}px`,
+                  height: `${highlightPosition.height}px`,
+                  pointerEvents: 'none',
+                  zIndex: 10001
+                }}
+              ></div>
+            </>
+          ) : (
+            // Standard approach for normal components
+            <>
+              <div 
+                className="tutorial-overlay"
+                style={{
+                  clipPath: `path('M 0,0 L 0,${window.innerHeight} L ${window.innerWidth},${window.innerHeight} L ${window.innerWidth},0 Z M ${highlightPosition.left},${highlightPosition.top} L ${highlightPosition.left + highlightPosition.width},${highlightPosition.top} L ${highlightPosition.left + highlightPosition.width},${highlightPosition.top + highlightPosition.height} L ${highlightPosition.left},${highlightPosition.top + highlightPosition.height} Z')`,
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%'
+                }}
+              ></div>
+              
+              <div 
+                className="tutorial-highlight" 
+                style={{
+                  top: `${highlightPosition.top}px`,
+                  left: `${highlightPosition.left}px`,
+                  width: `${highlightPosition.width}px`,
+                  height: `${highlightPosition.height}px`,
+                  pointerEvents: 'none'
+                }}
+              ></div>
+            </>
+          )}
+        </>
       )}
       
       {/* Tooltip */}
@@ -324,16 +444,6 @@ const Tutorial = ({ onComplete }) => {
           </button>
         </div>
       </div>
-      
-      {/* Animation */}
-      {currentTutorialStep.animation && (
-        <div 
-          ref={animationRef}
-          className={`tutorial-animation ${currentTutorialStep.animation}-animation`}
-        >
-          <div className="animation-dot"></div>
-        </div>
-      )}
     </div>
   );
 };
