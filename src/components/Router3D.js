@@ -9,7 +9,7 @@ const Router3D = ({ id, position, isSelected, onClick, disabled, connectMode, on
   const groupRef = useRef();
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [glowEffect, setGlowEffect] = useState(null); // 'accept', 'reject', or 'receive'
+  const [glowEffect, setGlowEffect] = useState(null); // 'accept', 'reject', 'receive', or 'ping-trail'
   const dragPointerId = useRef(null);
   
   // Function to make router glow with appropriate color
@@ -70,6 +70,11 @@ const Router3D = ({ id, position, isSelected, onClick, disabled, connectMode, on
           // Blue glow for packet reception
           meshRef.current.material.emissive.set('#3498db');
           meshRef.current.material.emissiveIntensity = 2.0;
+          break;
+        case 'ping-trail':
+          // Yellow glow for ping trail
+          meshRef.current.material.emissive.set('#ffcc00');
+          meshRef.current.material.emissiveIntensity = 1.5;
           break;
         default:
           // Reset glow effect

@@ -28,7 +28,9 @@ const Packet3D = ({ id, position, type, data }) => {
         }
       }
     }
-    
+    else if(type === 'ping') {
+      return `PING`;
+    }
     return 'LSP';
   };
   

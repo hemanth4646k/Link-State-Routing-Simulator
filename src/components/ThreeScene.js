@@ -22,6 +22,7 @@ const ThreeScene = ({
   selectionMode,
   moveMode,
   simulationStatus,
+  highlightedPingLinks = [], // Add prop for highlighted ping links with default empty array
   isDraggingRouter,
   dropIndicatorPos
 }) => {
@@ -138,6 +139,9 @@ const ThreeScene = ({
       const sourcePos = to3DCoordinates(source.x, source.y);
       const targetPos = to3DCoordinates(target.x, target.y);
       
+      // Check if this link is highlighted due to ping packet traversal
+      const isPingHighlighted = highlightedPingLinks.includes(link.id);
+      
       return (
         <Link3D
           key={link.id}
@@ -146,7 +150,8 @@ const ThreeScene = ({
           target={targetPos}
           cost={link.cost}
           isSelected={selectionMode && selectedElements.links.includes(link.id)}
-          onClick={handleLinkClick}
+          isPingHighlighted={isPingHighlighted}
+          onClick={() => onLinkClick(link.id)}
         />
       );
     });
@@ -305,4 +310,4 @@ const ThreeScene = ({
   );
 };
 
-export default ThreeScene; 
+export default ThreeScene;

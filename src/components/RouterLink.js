@@ -1,6 +1,6 @@
 import React from 'react';
 
-const RouterLink = ({ id, source, target, cost, onClick, isSelected }) => {
+const RouterLink = ({ id, source, target, cost, onClick, isSelected, isPingHighlighted }) => {
   if (!source || !target) return null;
   
   // Calculate center points of source and target routers
@@ -51,7 +51,7 @@ const RouterLink = ({ id, source, target, cost, onClick, isSelected }) => {
   return (
     <>
       <div
-        className={`router-link ${isSelected ? 'selected' : ''}`}
+        className={`router-link ${isSelected ? 'selected' : ''} ${isPingHighlighted ? 'ping-highlighted' : ''}`}
         style={{
           left: `${sourceCenter.x}px`,
           top: `${sourceCenter.y}px`,
@@ -62,7 +62,7 @@ const RouterLink = ({ id, source, target, cost, onClick, isSelected }) => {
         onTouchEnd={handleTouch}
       />
       <div
-        className={`router-link-cost ${isSelected ? 'selected' : ''}`}
+        className={`router-link-cost ${isSelected ? 'selected' : ''} ${isPingHighlighted ? 'ping-highlighted' : ''}`}
         style={{
           left: `${labelPos.x}px`,
           top: `${labelPos.y}px`,

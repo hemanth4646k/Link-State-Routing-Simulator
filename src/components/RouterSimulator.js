@@ -1122,7 +1122,21 @@ const RouterSimulator = () => {
           // For hello packets, update the neighbor relationship
           updateHelloPacket(fromId, toId);
         }
-        
+        else if (packetType === 'ping') {
+          // For ping packets, just log the successful hop (no need to update routing information)
+          console.log(`Ping packet from ${fromId} to ${toId} hop completed`);
+          
+          // Add a visual effect to the receiving router to indicate ping reception
+          const receivingRouterNode = document.getElementById(`router-${toId}`);
+          if (receivingRouterNode && receivingRouterNode.glow) {
+            receivingRouterNode.glow('receive');
+          }
+          
+          // Also glow the 3D router if it exists
+          if (window[`router3D_${toId}`] && window[`router3D_${toId}`].glow) {
+            window[`router3D_${toId}`].glow('receive');
+          }
+        }
         // If there's an external callback, call it
         if (externalCallback) {
           externalCallback();
@@ -1934,7 +1948,174 @@ const RouterSimulator = () => {
     // Show the custom packet modal
     setShowCustomPacketModal(true);
   };
+  // Function to find a path from source to destination using routing tables
+const findPathFromRoutingTable = (sourceId, targetId) => {
+  if (sourceId === targetId) return [sourceId]; // Same router
+
+  // Check if source router has a routing table
+  if (!routingTables[sourceId]) {
+    console.log(`No routing table found for router ${sourceId}`);
+    return null;
+  }
+
+  // Check if there's a route to the target router
+  if (!routingTables[sourceId][targetId]) {
+    console.log(`No route from ${sourceId} to ${targetId} in routing table`);
+    return null;
+  }
+
+  const path = [sourceId];
+  let currentRouter = sourceId;
+
+  // Follow the path through the routing table
+  while (currentRouter !== targetId) {
+    // Get the next hop from the routing table
+    const nextHop = routingTables[currentRouter][targetId].nextHop;
+    
+    // If next hop is a dash or self, it means direct connection or unreachable
+    if (nextHop === "—" || nextHop === currentRouter) {
+      if (nextHop === currentRouter) {
+        // Direct connection
+        path.push(targetId);
+        break;
+      } else {
+        console.log(`No valid next hop from ${currentRouter} to ${targetId}`);
+        return null;
+      }
+    }
+
+    path.push(nextHop);
+    currentRouter = nextHop;
+
+    // Safety check for loops
+    if (path.length > routers.length) {
+      console.log('Path finding looks like it has a loop');
+      return null;
+    }
+  }
+
+  return path;
+};
+// Helper function to calculate a color in a gradient between two colors
+function calculateGradientColor(startColor, endColor, ratio) {
+  // Parse the hex colors into RGB components
+  const start = {
+    r: parseInt(startColor.slice(1, 3), 16),
+    g: parseInt(startColor.slice(3, 5), 16),
+    b: parseInt(startColor.slice(5, 7), 16)
+  };
   
+  const end = {
+    r: parseInt(endColor.slice(1, 3), 16),
+    g: parseInt(endColor.slice(3, 5), 16),
+    b: parseInt(endColor.slice(5, 7), 16)
+  };
+  
+  // Interpolate between start and end colors
+  const r = Math.round(start.r + ratio * (end.r - start.r));
+  const g = Math.round(start.g + ratio * (end.g - start.g));
+  const b = Math.round(start.b + ratio * (end.b - start.b));
+  
+  // Convert RGB back to hex
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+// Function to animate a packet along a multi-hop path
+const animatePingAlongPath = (path) => {
+  if (!path || path.length < 2) {
+    console.log('Invalid path for animation');
+    return;
+  }
+
+  // Mark animation as in progress
+  setAnimationInProgress(true);
+
+  // Highlight all links along the path
+  const highlightedLinks = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const sourceId = path[i];
+    const targetId = path[i + 1];
+
+    // Find the link between these routers
+    const linkBetween = links.find(link => 
+      (link.source === sourceId && link.target === targetId) || 
+      (link.source === targetId && link.target === sourceId)
+    );
+
+    if (linkBetween) {
+      highlightedLinks.push(linkBetween.id);
+      // Highlight this link in the UI
+      const linkElement = document.getElementById(`link-${linkBetween.id}`);
+      if (linkElement) {
+        const ratio = i / (path.length - 2); // 0 for first link, 1 for last link
+        const color = calculateGradientColor('#ffcc00', '#ff8c00', ratio);
+        gsap.to(linkElement, {
+          stroke: color,
+          strokeWidth: 5,
+          duration: 0.3
+        });
+      }
+    }
+  }
+
+  // Set up the sequence of animations
+  const animateHop = (hopIndex) => {
+    if (hopIndex >= path.length - 1) {
+      // End of path, animation complete
+      setTimeout(() => {
+        // Reset link highlights
+        highlightedLinks.forEach(linkId => {
+          const linkElement = document.getElementById(`link-${linkId}`);
+          if (linkElement) {
+            gsap.to(linkElement, {
+              stroke: '#999',
+              strokeWidth: 2,
+              duration: 0.3
+            });
+          }
+        });
+        
+        setAnimationInProgress(false);
+        
+        // Add log entry for the ping completion
+        setSimulationLogs(prev => [
+          ...prev,
+          {
+            message: `PING from Router ${path[0]} to Router ${path[path.length-1]} completed successfully via route: ${path.join(' → ')}`,
+            type: 'success',
+            timestamp: Date.now()
+          }
+        ]);
+      }, 1000 / animationSpeed);
+      return;
+    }
+
+    const sourceId = path[hopIndex];
+    const targetId = path[hopIndex + 1];
+
+    // Find the router objects
+    const sourceRouter = routers.find(r => r.id === sourceId);
+    const targetRouter = routers.find(r => r.id === targetId);
+
+    if (!sourceRouter || !targetRouter) {
+      console.error(`Router not found for hop ${sourceId} -> ${targetId}`);
+      setAnimationInProgress(false);
+      return;
+    }
+
+    // Animate packet for this hop
+    animatePacket(
+      sourceId,
+      targetId,
+      `PING ${path[0]}→${path[path.length-1]}`,
+      'ping',
+      1000 / animationSpeed,
+      () => animateHop(hopIndex + 1) // Move to next hop when this animation completes
+    );
+  };
+
+  // Start the animation from the first hop
+  animateHop(0);
+};
   // Process the custom packet from the modal
   const handleCustomPacketSubmit = (packetData) => {
     if (packetData.type === 'hello') {
@@ -1956,7 +2137,38 @@ const RouterSimulator = () => {
         `Hello packet from ${packetData.source} to ${packetData.target}`,
         'hello'
       );
-    } else if (packetData.type === 'lsp') {
+    }else if (packetData.type === 'ping') {
+      // Check if source router has a routing table
+      if (!routingTables[packetData.source]) {
+        alert(`Router ${packetData.source} doesn't have a routing table yet. Please ensure the simulation has been started and routes have been established.`);
+        return;
+      }
+      
+      // Find the path using the routing table
+      const path = findPathFromRoutingTable(packetData.source, packetData.target);
+      
+      if (!path) {
+        // If no path found, show an error message
+        alert(`Router ${packetData.target} is unreachable from ${packetData.source} according to ${packetData.source}'s routing table.`);
+        
+        // Add log entry
+        setSimulationLogs(prev => [
+          ...prev,
+          {
+            message: `PING from Router ${packetData.source} to Router ${packetData.target} failed: destination unreachable`,
+            type: 'error',
+            timestamp: Date.now()
+          }
+        ]);
+        return;
+      }
+      
+      console.log(`Found path from ${packetData.source} to ${packetData.target}:`, path);
+      
+      // Animate the packet along the entire path
+      animatePingAlongPath(path); 
+    } 
+    else if (packetData.type === 'lsp') {
       // Check if the source and target are neighbors for LSP (since only neighbors can directly exchange LSPs)
       const areNeighbors = links.some(link => 
         (link.source === packetData.source && link.target === packetData.target) ||

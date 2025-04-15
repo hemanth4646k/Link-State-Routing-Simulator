@@ -3,7 +3,7 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Link component - represents a connection between routers
-const Link3D = ({ source, target, cost, isSelected, onClick, id }) => {
+const Link3D = ({ source, target, cost, isSelected, isPingHighlighted, onClick, id }) => {
   const linkRef = useRef();
   const [hovered, setHovered] = useState(false);
   
@@ -23,10 +23,13 @@ const Link3D = ({ source, target, cost, isSelected, onClick, id }) => {
   // Create geometry from points
   const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
   
-  // Update color based on selection and hover states
+  // Update color based on selection, hover, and ping highlight states
   useEffect(() => {
     if (linkRef.current) {
-      if (isSelected) {
+      if (isPingHighlighted) {
+        linkRef.current.material.color.set('#00ff00'); // Bright green for ping path
+        linkRef.current.material.linewidth = 3.5; // Extra thick for ping highlight
+      } else if (isSelected) {
         linkRef.current.material.color.set('#e74c3c'); // Red for selected
         linkRef.current.material.linewidth = 3; // Thicker when selected
       } else if (hovered) {
@@ -37,7 +40,7 @@ const Link3D = ({ source, target, cost, isSelected, onClick, id }) => {
         linkRef.current.material.linewidth = 2; // Default thickness
       }
     }
-  }, [isSelected, hovered]);
+  }, [isSelected, hovered, isPingHighlighted]);
   
   return (
     <group>
@@ -64,8 +67,8 @@ const Link3D = ({ source, target, cost, isSelected, onClick, id }) => {
       <Html position={midpoint} center transform sprite distanceFactor={8}>
         <div 
           style={{ 
-            background: isSelected ? '#e74c3c' : '#fff',
-            color: isSelected ? '#fff' : '#333',
+            background: isPingHighlighted ? '#00ff00' : isSelected ? '#e74c3c' : '#fff',
+            color: (isPingHighlighted || isSelected) ? '#fff' : '#333',
             borderRadius: '50%',
             width: '28px',
             height: '28px',

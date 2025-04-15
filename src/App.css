@@ -1251,3 +1251,20 @@ canvas {
     opacity: 1;
   }
 }
+
+/* Ping trail effects */
+.router-node.ping-trail {
+  box-shadow: 0 0 20px 10px rgba(255, 204, 0, 0.6);
+  animation: pingTrailPulse 2s ease-in-out infinite;
+}
+
+.link.ping-trail {
+  filter: drop-shadow(0 0 8px rgba(255, 204, 0, 0.8));
+  animation: pingTrailPulse 2s ease-in-out infinite;
+}
+
+@keyframes pingTrailPulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}

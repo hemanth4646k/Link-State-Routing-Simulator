@@ -3,6 +3,7 @@ import './CustomPacketModal.css';
 
 const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
   const [packetType, setPacketType] = useState('hello');
+  const [pathError, setPathError] = useState('');
   const [sourceRouter, setSourceRouter] = useState('');
   const [targetRouter, setTargetRouter] = useState('');
   const [sequenceNumber, setSequenceNumber] = useState(1);
@@ -10,8 +11,10 @@ const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
   const [validSources, setValidSources] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // When LSP owner changes, check which routers have received this LSP
+  // Check path availability for ping packets and handle LSP updates
   useEffect(() => {
+    // For ping packets, we don't need to do anything special in this useEffect
+    // For LSP packets, check which routers have received this LSP
     if (packetType === 'lsp' && lspOwner) {
       // Find routers that have received this LSP 
       const routersWithLsp = [];
@@ -38,6 +41,7 @@ const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
       }
     } else {
       setErrorMessage('');
+      setPathError('');
     }
   }, [lspOwner, lsdbData, packetType]);
 
@@ -74,6 +78,17 @@ const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
         lspOwner: lspOwner,
         sequenceNumber: sequenceNumber
       });
+    } else if (packetType === 'ping') {
+      if (!sourceRouter || !targetRouter) {
+        alert('Please select both source and destination routers');
+        return;
+      }
+      
+      onSendPacket({
+        type: 'ping',
+        source: sourceRouter,
+        target: targetRouter
+      });
     }
     
     onClose();
@@ -93,11 +108,13 @@ const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
               onChange={(e) => {
                 setPacketType(e.target.value);
                 setErrorMessage('');
+                setPathError('');
                 setLspOwner('');
               }}
             >
               <option value="hello">Hello Packet</option>
               <option value="lsp">Link State Packet (LSP)</option>
+              <option value="ping">Ping Packet</option>
             </select>
           </div>
           
@@ -195,6 +212,16 @@ const CustomPacketModal = ({ onClose, onSendPacket, routers, lsdbData }) => {
                 onChange={(e) => setSequenceNumber(parseInt(e.target.value))}
                 required
               />
+            </div>
+          )}
+          
+          {packetType === 'ping' && (
+            <div className="form-group">
+              <p className="help-text">
+                A ping packet will check if there is a route from source to destination in the source router's routing table.
+                If a path exists, the packet will be animated along the path. Otherwise, an error will be displayed.
+              </p>
+              {pathError && <p className="error-message">{pathError}</p>}
             </div>
           )}
           
