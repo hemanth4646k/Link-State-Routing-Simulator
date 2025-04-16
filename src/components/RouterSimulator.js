@@ -177,6 +177,21 @@ const RouterSimulator = () => {
         setShowLinkCostModal(true);
       }
     } else if (selectionMode || moveMode) {
+      // If in selectionMode AND simulationStatus is 'paused', only allow selecting links, not routers
+      if (selectionMode && simulationStatus === 'paused') {
+        // Don't select routers when simulation is paused and in selection mode
+        // Add a log entry to show the user what happened
+        setSimulationLogs(prev => [
+          ...prev,
+          {
+            message: `You cannot delete routers during simulation pause. Only links can be deleted.`,
+            type: 'warning',
+            timestamp: Date.now()
+          }
+        ]);
+        return;
+      }
+      
       // Toggle selection of this router
       setSelectedElements(prev => {
         const isSelected = prev.routers.includes(id);
@@ -371,72 +386,22 @@ const RouterSimulator = () => {
         });
         
         // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
-        return;
       }
       
-      // Process router deletions
-      if (selectedRouterIds.length > 0) {
-        console.log("About to delete routers:", selectedRouterIds);
-        
-        // Find links connected to the routers being deleted
-        const affectedLinks = links.filter(link => 
-          selectedRouterIds.includes(link.source) || selectedRouterIds.includes(link.target)
-        );
-        
-        console.log("Router deletion affects links:", JSON.stringify(affectedLinks));
-        
-        // For each affected link, the non-deleted router endpoint needs to flood a new LSP
-        affectedLinks.forEach(link => {
-          if (selectedRouterIds.includes(link.source) && !selectedRouterIds.includes(link.target)) {
-            routersNeedingLSPFlood.add(link.target);
-            console.log(`Router deletion affects router: ${link.target}`);
-          } 
-          else if (selectedRouterIds.includes(link.target) && !selectedRouterIds.includes(link.source)) {
-            routersNeedingLSPFlood.add(link.source);
-            console.log(`Router deletion affects router: ${link.source}`);
-          }
-        });
-        
-        // Delete the routers
-        setRouters(prev => {
-          const newRouters = prev.filter(router => !selectedRouterIds.includes(router.id));
-          console.log("Routers after deletion:", JSON.stringify(newRouters));
-          return newRouters;
-        });
-        
-        // Delete the links connected to deleted routers
-        const linkedLinkIds = affectedLinks.map(link => link.id);
-        setLinks(prev => {
-          const newLinks = prev.filter(link => !linkedLinkIds.includes(link.id));
-          console.log("Links after router-related deletion:", JSON.stringify(newLinks));
-          
-          // IMPORTANT: Immediately update the LSDB with the new topology after router deletion
-          setTimeout(() => {
-            // Force update the LSDB for all affected routers based on the new links
-            if (routersNeedingLSPFlood.size > 0) {
-              console.log("Immediately updating LSDB after router deletion");
-              updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), newLinks);
-            }
-          }, 0);
-          
-          return newLinks;
-        });
-        
-        // Don't call updateLSDBAfterTopologyChange here as we already called it in the setLinks callback
-        return;
-      }
+      // Process router deletions - This section is removed to disable node deletion during simulation pause
+      // We're keeping the link deletion functionality only
       
       console.log("Routers needing LSP flood:", Array.from(routersNeedingLSPFlood));
       
       // Only call updateLSDBAfterTopologyChange if we haven't already handled it in the setLinks callbacks
       // This code path shouldn't be reached in normal operation
-      if (routersNeedingLSPFlood.size > 0 && selectedLinkIds.length === 0 && selectedRouterIds.length === 0) {
+      if (routersNeedingLSPFlood.size > 0 && selectedLinkIds.length === 0) {
         console.log("Calling updateLSDBAfterTopologyChange with affected routers");
         // Get current links to pass to the update function
         const currentLinks = [...links];
         updateLSDBAfterTopologyChange(Array.from(routersNeedingLSPFlood), currentLinks);
       } else {
-        console.log("No routers need to flood LSPs or LSP flooding is handled directly in link/router deletion");
+        console.log("No routers need to flood LSPs or LSP flooding is handled directly in link deletion");
       }
       
       // Clear selection
@@ -576,6 +541,7 @@ const RouterSimulator = () => {
     console.log(`Updating routing tables for ALL routers after topology change:`, allRouterIds);
     
     allRouterIds.forEach(routerId => {
+      // Each router calculates routes based on its own view of the network
       const routerTables = calculateDijkstraForRouter(routerId, updatedLSDB);
       setRoutingTables(prevTables => {
         const updatedTables = { ...prevTables };
@@ -585,24 +551,23 @@ const RouterSimulator = () => {
           updatedTables[routerId] = {};
         }
         
-        // Always include self route
-        updatedTables[routerId].self = {
+        // MODIFIED: Always clear the entire routing table at each step before regenerating
+        // Keep only the self route temporarily
+        const selfRoute = updatedTables[routerId].self || {
           destination: routerId,
           nextHop: "—", // Em dash to represent direct
           cost: 0
         };
         
-        // Clear previous routes that might be affected by the topology change
-        if (affectedRouters.includes(routerId)) {
-          const destinations = Object.keys(updatedTables[routerId]).filter(key => key !== 'self');
-          destinations.forEach(destId => {
-            delete updatedTables[routerId][destId];
-          });
-          
-          console.log(`Cleared existing routes for Router ${routerId} due to topology change`);
-        }
+        // Clear ALL routes
+        updatedTables[routerId] = {};
         
-        // Add routes from calculated tables
+        // Re-add self route
+        updatedTables[routerId].self = selfRoute;
+        
+        console.log(`Cleared entire routing table for Router ${routerId} for complete regeneration`);
+        
+        // Add new routes from calculated tables
         if (routerTables) {
           Object.keys(routerTables).forEach(destId => {
             if (destId !== 'self') {
@@ -611,36 +576,9 @@ const RouterSimulator = () => {
           });
         }
         
-        // Special handling for direct connections that were removed
-        affectedRouters.forEach(affectedId => {
-          // If this is a directly affected router, check for routes through the other affected router
-          if (routerId === affectedId) {
-            // Find the other affected router(s)
-            const otherAffectedRouters = affectedRouters.filter(id => id !== routerId);
-            
-            otherAffectedRouters.forEach(otherRouterId => {
-              // Check if there's a route through the other affected router
-              Object.keys(updatedTables[routerId]).forEach(destId => {
-                if (destId !== 'self') {
-                  const route = updatedTables[routerId][destId];
-                  // If the next hop is the other affected router, this route may now be invalid
-                  if (route && route.nextHop === otherRouterId) {
-                    // Double check if this router still has a connection to the other router
-                    const stillConnected = updatedLSDB[routerId][routerId] && 
-                                          updatedLSDB[routerId][routerId].includes(otherRouterId);
-                    
-                    if (!stillConnected) {
-                      console.log(`Removing route from ${routerId} to ${destId} through disconnected router ${otherRouterId}`);
-                      delete updatedTables[routerId][destId];
-                    }
-                  }
-                }
-              });
-            });
-          }
-        });
+        // Log the updated routing table for debugging
+        console.log(`Regenerated routing table for Router ${routerId} using its own LSDB view:`, updatedTables[routerId]);
         
-        console.log(`Updated routing table for Router ${routerId} after topology change:`, updatedTables[routerId]);
         return updatedTables;
       });
     });
@@ -841,7 +779,10 @@ const RouterSimulator = () => {
     // Set all the simulation state at once to ensure consistency
     setLsdbData(initialLSDB);
     setProcessedLSPs(initialProcessedLSPs);
-    setRoutingTables(initialRoutingTables);
+    setRoutingTables(prevTables => {
+      console.log("Setting initial routing tables for simulation start");
+      return initialRoutingTables;
+    });
     setRouterSequenceNumbers(initialSequenceNumbers);
     
     // Save current animation speed for consistent use
@@ -942,7 +883,10 @@ const RouterSimulator = () => {
           };
         });
         // Set initial tables
-        setRoutingTables(initialRoutingTables);
+        setRoutingTables(prevTables => {
+          console.log("Initializing empty routing tables for all routers");
+          return initialRoutingTables;
+        });
       }
     }
   };
@@ -1484,22 +1428,21 @@ const RouterSimulator = () => {
                   updatedTables[rid] = {};
                 }
                 
-                // Always include self route
-                updatedTables[rid].self = {
+                // MODIFIED: Always clear the entire routing table at each step before regenerating
+                // Keep only the self route temporarily
+                const selfRoute = updatedTables[rid].self || {
                   destination: rid,
                   nextHop: "—", // Em dash to represent direct
                   cost: 0
                 };
                 
-                // Clear previous routes that might be affected by the topology change
-                if (topologyChanged) {
-                  const destinations = Object.keys(updatedTables[rid]).filter(key => key !== 'self');
-                  destinations.forEach(destId => {
-                    delete updatedTables[rid][destId];
-                  });
-                  
-                  console.log(`Cleared existing routes for Router ${rid} due to topology change`);
-                }
+                // Clear ALL routes
+                updatedTables[rid] = {};
+                
+                // Re-add self route
+                updatedTables[rid].self = selfRoute;
+                
+                console.log(`Cleared entire routing table for Router ${rid} for complete regeneration`);
                 
                 // Add new routes from calculated tables
                 if (routerTables) {
@@ -1510,25 +1453,8 @@ const RouterSimulator = () => {
                   });
                 }
                 
-                // If there were any removed neighbors, make sure routes through them are gone
-                if (removedNeighbors.length > 0 && topologyChanged) {
-                  console.log(`Checking for routes through removed neighbors: ${removedNeighbors.join(', ')}`);
-                  
-                  // For each destination, if the next hop is a removed neighbor, remove the route
-                  Object.keys(updatedTables[rid]).forEach(destId => {
-                    if (destId !== 'self') {
-                      const route = updatedTables[rid][destId];
-                      // If the next hop is the other affected router, this route may now be invalid
-                      if (route && removedNeighbors.includes(route.nextHop)) {
-                        console.log(`Removing route to ${destId} through removed neighbor ${route.nextHop}`);
-                        delete updatedTables[rid][destId];
-                      }
-                    }
-                  });
-                }
-                
                 // Log the updated routing table for debugging
-                console.log(`Updated routing table for Router ${rid}:`, updatedTables[rid]);
+                console.log(`Regenerated routing table for Router ${rid}:`, updatedTables[rid]);
                 
                 return updatedTables;
               });
@@ -1621,7 +1547,18 @@ const RouterSimulator = () => {
     // Only update routing tables if we have valid data for all routers
     if (Object.keys(tables).length === routers.length) {
       console.log("Setting routing tables:", tables);
-      setRoutingTables(tables);
+      setRoutingTables(prevTables => {
+        // Create a new copy with all current tables
+        const updatedTables = { ...prevTables };
+        
+        // Replace each router's table with the freshly calculated one
+        Object.keys(tables).forEach(routerId => {
+          updatedTables[routerId] = tables[routerId];
+          console.log(`Regenerated routing table for Router ${routerId} using calculateRoutingTables`);
+        });
+        
+        return updatedTables;
+      });
     } else {
       console.error("Could not calculate routing tables for all routers");
     }
@@ -1633,56 +1570,71 @@ const RouterSimulator = () => {
     const previous = {};
     const unvisited = new Set();
     
-    // Initialize data
-    routers.forEach(router => {
-      distances[router.id] = Infinity;
-      previous[router.id] = null;
-      unvisited.add(router.id);
-    });
+    // Skip if router doesn't have any LSDB data
+    if (!currentLSDB[startId]) {
+      console.log(`Router ${startId} has no LSDB data, cannot calculate routes`);
+      return {};
+    }
     
-    distances[startId] = 0;
-    
-    // Build a graph from the LSDB data instead of physical links
-    const graph = {};
-    
-    // Initialize the graph structure
-    routers.forEach(router => {
-      graph[router.id] = {};
-    });
-    
-    // We need to verify bi-directional connectivity in the LSDB
-    // First, collect all confirmed connections from the LSDB
-    const confirmedConnections = new Set();
+    // Build a view of the network only based on what THIS router knows
+    const routerView = currentLSDB[startId];
     
     // Log the current LSDB state for debugging
-    console.log(`Router ${startId} calculating routes with LSDB:`, JSON.stringify(currentLSDB[startId]));
+    console.log(`Router ${startId} calculating routes with its own LSDB view:`, JSON.stringify(routerView));
     
-    // Verify all connections are truly bidirectional according to the LSDB
-    Object.entries(currentLSDB).forEach(([routerId, routerData]) => {
-      // Skip sequence numbers entry
-      if (routerId === 'sequenceNumbers') return;
-      
-      // For each router's view of its neighbors
-      if (routerData[routerId] && Array.isArray(routerData[routerId])) {
-        routerData[routerId].forEach(neighborId => {
-          // Check if the neighbor also knows about this router
-          const neighborKnowsThisRouter = currentLSDB[neighborId] && 
-              currentLSDB[neighborId][neighborId] &&
-              Array.isArray(currentLSDB[neighborId][neighborId]) &&
-              currentLSDB[neighborId][neighborId].includes(routerId);
-          
-          if (neighborKnowsThisRouter) {
-            // This is a confirmed bidirectional connection
-            const connectionKey = [routerId, neighborId].sort().join('-');
-            confirmedConnections.add(connectionKey);
-          } else {
-            console.log(`Connection ${routerId}-${neighborId} not bidirectional in LSDB - not used for routing`);
-          }
-        });
+    // Create a set of all routers known to this router (to properly initialize data structures)
+    const knownRouters = new Set();
+    knownRouters.add(startId); // Always know ourselves
+    
+    // Add all routers this router knows about from its LSDB
+    Object.keys(routerView).forEach(routerId => {
+      // Only add router IDs, not other properties like sequenceNumbers
+      if (routerId !== 'sequenceNumbers') {
+        knownRouters.add(routerId);
+        
+        // If this router knows about another router's neighbors, add those too
+        if (Array.isArray(routerView[routerId])) {
+          routerView[routerId].forEach(neighborId => {
+            knownRouters.add(neighborId);
+          });
+        }
       }
     });
     
-    console.log(`Router ${startId} confirmed bidirectional connections:`, Array.from(confirmedConnections));
+    console.log(`Router ${startId} knows about these routers:`, Array.from(knownRouters));
+    
+    // Initialize data ONLY for routers that this router knows about
+    Array.from(knownRouters).forEach(routerId => {
+      distances[routerId] = routerId === startId ? 0 : Infinity;
+      previous[routerId] = null;
+      unvisited.add(routerId);
+    });
+    
+    // Build a graph from THIS ROUTER'S LSDB data
+    const graph = {};
+    
+    // Initialize the graph structure ONLY for known routers
+    Array.from(knownRouters).forEach(routerId => {
+      graph[routerId] = {};
+    });
+    
+    // First, collect all connections that this router knows about
+    const confirmedConnections = new Set();
+    
+    // Extract all connections from the router's own LSDB view
+    Object.entries(routerView).forEach(([routerId, neighbors]) => {
+      // Skip sequence numbers and other non-array entries
+      if (!Array.isArray(neighbors)) return;
+      
+      // For each neighbor of this router
+      neighbors.forEach(neighborId => {
+        // Add a bidirectional connection (both directions)
+        const connectionKey = [routerId, neighborId].sort().join('-');
+        confirmedConnections.add(connectionKey);
+      });
+    });
+    
+    console.log(`Router ${startId} connections known from its LSDB:`, Array.from(confirmedConnections));
     
     // Now build the graph only with confirmed connections
     confirmedConnections.forEach(connection => {
@@ -1699,6 +1651,9 @@ const RouterSimulator = () => {
         if (!graph[router1]) graph[router1] = {};
         if (!graph[router2]) graph[router2] = {};
         
+        // Use the link cost from the physical network
+        // We could implement LSAs with costs in the future, but for now
+        // we use the physical link cost since the LSDB doesn't store costs
         graph[router1][router2] = link.cost;
         graph[router2][router1] = link.cost;
       }
@@ -1707,22 +1662,7 @@ const RouterSimulator = () => {
     // Debug the graph
     console.log(`Graph for Router ${startId} routing calculation:`, JSON.stringify(graph, null, 2));
     
-    // Special check for the current router - only include connections that the router itself knows about
-    // This ensures routers don't route through connections they don't personally know about
-    if (currentLSDB[startId] && currentLSDB[startId][startId]) {
-      // Get the router's own view of its neighbors
-      const ownNeighbors = new Set(currentLSDB[startId][startId]);
-      
-      // Ensure the router's outgoing connections match its own view
-      Object.keys(graph[startId]).forEach(neighborId => {
-        if (!ownNeighbors.has(neighborId)) {
-          console.log(`Router ${startId} doesn't know about connection to ${neighborId}, removing from graph`);
-          delete graph[startId][neighborId];
-        }
-      });
-    }
-    
-    // Now run Dijkstra on the graph built from LSDB
+    // Now run Dijkstra on the graph built strictly from the router's own LSDB view
     while (unvisited.size > 0) {
       // Find the unvisited node with the smallest distance
       let current = null;
@@ -1760,16 +1700,16 @@ const RouterSimulator = () => {
     // Build the routing table
     const routingTable = {};
     
-    // For each router except the source
-    routers.forEach(router => {
-      if (router.id === startId) return; // Skip self (handled separately)
+    // For each router that this router knows about, except the source
+    Array.from(knownRouters).forEach(routerId => {
+      if (routerId === startId) return; // Skip self (handled separately)
       
       // Skip if no path exists
-      if (distances[router.id] === Infinity) return;
+      if (distances[routerId] === Infinity) return;
       
       // Reconstruct the path to this destination
       let path = [];
-      let current = router.id;
+      let current = routerId;
       
       while (current !== null) {
         path.unshift(current);
@@ -1781,19 +1721,22 @@ const RouterSimulator = () => {
         // The next hop is the second node in the path
         const nextHop = path[1];
         
-        routingTable[router.id] = {
-          destination: router.id,
+        routingTable[routerId] = {
+          destination: routerId,
           nextHop,
-          cost: distances[router.id]
+          cost: distances[routerId]
         };
       }
     });
     
+    console.log(`Router ${startId} calculated routing table:`, routingTable);
     return routingTable;
   };
   
   // Dijkstra's algorithm for calculating shortest paths
   const calculateDijkstra = (startId) => {
+    // Use the router's own LSDB to calculate routes
+    console.log(`Using router ${startId}'s own LSDB view for route calculation`);
     return calculateDijkstraForRouter(startId, lsdbData);
   };
   
@@ -1838,6 +1781,7 @@ const RouterSimulator = () => {
     // Calculate tables for each router
     const tables = {};
     routers.forEach(router => {
+      // Each router calculates routes based on its own view of the network (its own LSDB)
       tables[router.id] = calculateDijkstraForRouter(router.id, updatedLSDB);
       
       // Always ensure there's at least an entry for self
@@ -1854,7 +1798,18 @@ const RouterSimulator = () => {
     });
     
     console.log("Generated routing tables:", tables);
-    setRoutingTables(tables);
+    setRoutingTables(prevTables => {
+      // Create a fresh copy, discarding previous routing tables
+      const updatedTables = {};
+      
+      // Add all newly calculated tables
+      Object.keys(tables).forEach(routerId => {
+        updatedTables[routerId] = tables[routerId];
+        console.log(`Regenerated routing table for Router ${routerId} at simulation end using its own LSDB view`);
+      });
+      
+      return updatedTables;
+    });
     console.log("Routing tables keys:", Object.keys(tables));
     
     // Update step counter
@@ -1865,7 +1820,10 @@ const RouterSimulator = () => {
   const handleResetSimulation = () => {
     // Reset simulation data, but keep routers and links
     setLsdbData({});
-    setRoutingTables({});
+    setRoutingTables(prevTables => {
+      console.log("Clearing all routing tables during reset");
+      return {};
+    });
     setProcessedLSPs({});
     setPackets([]);
     setCurrentStep(0);
@@ -2858,7 +2816,7 @@ const animatePingAlongPath = (path) => {
                 className="toolbox-button"
                 disabled={simulationStatus === 'running' || moveMode}
               >
-                Delete Elements
+                {simulationStatus === 'paused' ? 'Delete Links' : 'Delete Elements'}
               </button>
             ) : (
               // Show Delete and Cancel buttons when in selection mode
