@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/Link-State-Routing-Simulator/static/css/main.f55375f0.css",
-    "main.js": "/Link-State-Routing-Simulator/static/js/main.f2d0f9fc.js",
-    "static/js/453.7ede5a6e.chunk.js": "/Link-State-Routing-Simulator/static/js/453.7ede5a6e.chunk.js",
-    "index.html": "/Link-State-Routing-Simulator/index.html",
-    "main.f55375f0.css.map": "/Link-State-Routing-Simulator/static/css/main.f55375f0.css.map",
-    "main.f2d0f9fc.js.map": "/Link-State-Routing-Simulator/static/js/main.f2d0f9fc.js.map",
-    "453.7ede5a6e.chunk.js.map": "/Link-State-Routing-Simulator/static/js/453.7ede5a6e.chunk.js.map"
+    "main.css": "/link-state-routing-simulator/static/css/main.0ab8c3fb.css",
+    "main.js": "/link-state-routing-simulator/static/js/main.0324b936.js",
+    "static/js/453.7ede5a6e.chunk.js": "/link-state-routing-simulator/static/js/453.7ede5a6e.chunk.js",
+    "index.html": "/link-state-routing-simulator/index.html",
+    "main.0ab8c3fb.css.map": "/link-state-routing-simulator/static/css/main.0ab8c3fb.css.map",
+    "main.0324b936.js.map": "/link-state-routing-simulator/static/js/main.0324b936.js.map",
+    "453.7ede5a6e.chunk.js.map": "/link-state-routing-simulator/static/js/453.7ede5a6e.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.f55375f0.css",
-    "static/js/main.f2d0f9fc.js"
+    "static/css/main.0ab8c3fb.css",
+    "static/js/main.0324b936.js"
   ]
 }
