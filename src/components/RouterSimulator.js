@@ -1070,15 +1070,38 @@ const RouterSimulator = () => {
           // For ping packets, just log the successful hop (no need to update routing information)
           console.log(`Ping packet from ${fromId} to ${toId} hop completed`);
           
-          // Add a visual effect to the receiving router to indicate ping reception
-          const receivingRouterNode = document.getElementById(`router-${toId}`);
-          if (receivingRouterNode && receivingRouterNode.glow) {
-            receivingRouterNode.glow('receive');
-          }
-          
-          // Also glow the 3D router if it exists
-          if (window[`router3D_${toId}`] && window[`router3D_${toId}`].glow) {
-            window[`router3D_${toId}`].glow('receive');
+          // Check if this is a ping packet
+          const pingMatch = packetData.match(/PING ([A-Z])→([A-Z])/);
+          if (pingMatch) {
+            const pingSource = pingMatch[1];
+            const pingDestination = pingMatch[2];
+            
+            // If this is the final destination of the ping, use green 'accept' glow
+            // Otherwise use the standard blue 'receive' glow for intermediate hops
+            const glowType = (toId === pingDestination) ? 'accept' : 'receive';
+            
+            // Add a visual effect to the receiving router to indicate ping reception
+            const receivingRouterNode = document.getElementById(`router-${toId}`);
+            if (receivingRouterNode && receivingRouterNode.glow) {
+              receivingRouterNode.glow(glowType);
+            }
+            
+            // Also glow the 3D router if it exists
+            if (window[`router3D_${toId}`] && window[`router3D_${toId}`].glow) {
+              window[`router3D_${toId}`].glow(glowType);
+            }
+          } else {
+            // Fallback to standard behavior if packet format doesn't match
+            // Add a visual effect to the receiving router to indicate ping reception
+            const receivingRouterNode = document.getElementById(`router-${toId}`);
+            if (receivingRouterNode && receivingRouterNode.glow) {
+              receivingRouterNode.glow('receive');
+            }
+            
+            // Also glow the 3D router if it exists
+            if (window[`router3D_${toId}`] && window[`router3D_${toId}`].glow) {
+              window[`router3D_${toId}`].glow('receive');
+            }
           }
         }
         // If there's an external callback, call it
@@ -2032,6 +2055,57 @@ const animatePingAlongPath = (path) => {
           }
         });
         
+        // Make the destination router glow green (accept) to indicate ping success
+        const destinationId = path[path.length - 1];
+        const destinationRouter = document.getElementById(`router-${destinationId}`);
+        if (destinationRouter && destinationRouter.glow) {
+          destinationRouter.glow('accept'); // Use 'accept' for green glow
+        }
+        
+        // Also glow the 3D router if it exists
+        if (window[`router3D_${destinationId}`] && window[`router3D_${destinationId}`].glow) {
+          window[`router3D_${destinationId}`].glow('accept');
+        }
+        
+        // Create a simplified ping command output notification near the source router
+        const sourceId = path[0];
+        const sourceRouter = routers.find(r => r.id === sourceId);
+        const destinationRouterObj = routers.find(r => r.id === destinationId);
+        const rttMs = Math.floor(Math.random() * 20) + 5; // Random RTT between 5-25ms
+        const hops = path.length - 1;
+        
+        if (sourceRouter) {
+          // Create a notification element
+          const notification = document.createElement('div');
+          notification.className = 'ping-notification';
+          notification.innerHTML = `
+            <div class="ping-result">
+              <div>PING Router ${destinationId} successful</div>
+              <div>${hops} hop(s), time=${rttMs}ms</div>
+            </div>
+          `;
+          
+          // Position near the source router
+          notification.style.position = 'absolute';
+          notification.style.top = `${sourceRouter.y - 60}px`;
+          notification.style.left = `${sourceRouter.x}px`;
+          notification.style.transform = 'translate(-50%, -100%)';
+          notification.style.zIndex = '100';
+          
+          // Add to DOM
+          document.querySelector('.simulator-stage').appendChild(notification);
+          
+          // Remove after a few seconds
+          setTimeout(() => {
+            notification.classList.add('fade-out');
+            setTimeout(() => {
+              if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+              }
+            }, 1000);
+          }, 4000);
+        }
+        
         setAnimationInProgress(false);
         
         // Add log entry for the ping completion
@@ -2124,7 +2198,7 @@ const animatePingAlongPath = (path) => {
       console.log(`Found path from ${packetData.source} to ${packetData.target}:`, path);
       
       // Animate the packet along the entire path
-      animatePingAlongPath(path); 
+      animatePingAlongPath(path);
     } 
     else if (packetData.type === 'lsp') {
       // Check if the source and target are neighbors for LSP (since only neighbors can directly exchange LSPs)

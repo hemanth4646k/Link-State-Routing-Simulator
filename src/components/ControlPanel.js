@@ -22,20 +22,15 @@ const ControlPanel = ({
   const isCompleted = simulationStatus === 'completed';
   
   // State for collapsible sections
-  const [isInstructionsCollapsed, setIsInstructionsCollapsed] = useState(false);
-  const [isStepsGuideCollapsed, setIsStepsGuideCollapsed] = useState(false);
+  const [isLegendCollapsed, setIsLegendCollapsed] = useState(false);
   
   const handleSpeedChange = (e) => {
     const newSpeed = parseFloat(e.target.value);
     onSpeedChange(newSpeed);
   };
   
-  const toggleInstructions = () => {
-    setIsInstructionsCollapsed(!isInstructionsCollapsed);
-  };
-  
-  const toggleStepsGuide = () => {
-    setIsStepsGuideCollapsed(!isStepsGuideCollapsed);
+  const toggleLegend = () => {
+    setIsLegendCollapsed(!isLegendCollapsed);
   };
   
   return (
@@ -178,51 +173,42 @@ const ControlPanel = ({
         </div>
       </div>
       
-      {isRunning && (
-        <div className="panel-section steps-guide">
-          <div 
-            className={`collapsible-header ${isStepsGuideCollapsed ? 'collapsed' : ''}`}
-            onClick={toggleStepsGuide}
-          >
-            <h4>Simulation Steps Guide</h4>
-            <span className="collapsible-icon">
-              {isStepsGuideCollapsed ? '►' : '▼'}
-            </span>
-          </div>
-          
-          <div className={`collapsible-content ${isStepsGuideCollapsed ? 'collapsed' : ''}`}>
-            <ul className="steps-guide-list">
-              <li><strong>Step 1:</strong> Routers discover neighbors via Hello packets</li>
-              <li><strong>Step 2-3:</strong> Routers create and flood LSPs with neighbor information</li>
-              <li><strong>Step 4+:</strong> LSPs are forwarded to all routers to build complete topology</li>
-              <li><strong>Final Steps:</strong> Routing tables are calculated using Dijkstra's algorithm</li>
-            </ul>
-            <div className="step-tip">
-              <p>💡 After link deletions, routers will flood new LSPs with incremented sequence numbers.</p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="panel-section instructions">
+      <div className="panel-section legend">
         <div 
-          className={`collapsible-header ${isInstructionsCollapsed ? 'collapsed' : ''}`}
-          onClick={toggleInstructions}
+          className={`collapsible-header ${isLegendCollapsed ? 'collapsed' : ''}`}
+          onClick={toggleLegend}
         >
-          <h4>How to Use</h4>
+          <h4>Legend</h4>
           <span className="collapsible-icon">
-            {isInstructionsCollapsed ? '►' : '▼'}
+            {isLegendCollapsed ? '►' : '▼'}
           </span>
         </div>
         
-        <div className={`collapsible-content ${isInstructionsCollapsed ? 'collapsed' : ''}`}>
-          <ul className="instructions-list">
-            <li><strong>Setup:</strong> Drag routers to position them on the stage</li>
-            <li><strong>Connect:</strong> Click "Connect Routers" button, then click two routers</li>
-            <li><strong>Start:</strong> Click "Start Simulation" to begin the routing protocol</li>
-            <li><strong>Next Steps:</strong> Click "Next Step" repeatedly to progress through the simulation</li>
-            <li><strong>Editing:</strong> Pause simulation, then use "Select" mode to delete elements</li>
-            <li><strong>View Data:</strong> Use the right panel to view LSDB and routing tables</li>
+        <div className={`collapsible-content ${isLegendCollapsed ? 'collapsed' : ''}`}>
+          <ul className="legend-list">
+            <li>
+              <span className="legend-item pause-edit">
+                <div className="pause-icon"></div>
+              </span>
+              <div className="legend-text">
+                <div className="legend-title">Pause and Edit Network:</div>
+                <div className="legend-description">Click Pause to modify the network during simulation</div>
+              </div>
+            </li>
+            <li>
+              <span className="legend-item green-flash">🟢</span>
+              <div className="legend-text">
+                <div className="legend-title">Green Flash:</div>
+                <div className="legend-description">Appears when an LSP or Ping packet is accepted</div>
+              </div>
+            </li>
+            <li>
+              <span className="legend-item red-flash">🔴</span>
+              <div className="legend-text">
+                <div className="legend-title">Red Light:</div>
+                <div className="legend-description">Appears when an LSP packet is rejected</div>
+              </div>
+            </li>
           </ul>
         </div>
       </div>

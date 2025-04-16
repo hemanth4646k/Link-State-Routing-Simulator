@@ -243,22 +243,6 @@ const LSDBPanel = ({ lsdbData, routingTables, currentHighlight, simulationStatus
   
   return (
     <div className="lsdb-panel">
-      <div className="panel-explainer">
-        {viewMode === 'lsdb' && (
-          <div className="info-box">
-            <p><strong>Link State Database (LSDB)</strong> contains each router's knowledge of the network topology.</p>
-            <p>Each row shows a router's neighbors and the cost to reach them.</p>
-          </div>
-        )}
-        
-        {viewMode === 'routingTable' && (
-          <div className="info-box">
-            <p><strong>Routing Table</strong> shows the best path to each destination.</p>
-            <p>Next = next hop router, Cost = total path cost to destination</p>
-          </div>
-        )}
-      </div>
-      
       <div className="database-section">
         {renderViewModeSelector()}
         {renderRouterSelector()}
