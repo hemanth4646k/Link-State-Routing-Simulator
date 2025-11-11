@@ -52,4 +52,3 @@ npm start
 ## 🔗 Links
 
 - 🌐 **Live Demo**: [https://hemanth4646k.github.io/Link-State-Routing-Simulator/](https://hemanth4646k.github.io/Link-State-Routing-Simulator/)
-- 📁 **GitHub Repository**: [https://github.com/hemanth4646k/Link-State-Routing-Simulator](https://github.com/hemanth4646k/Link-State-Routing-Simulator)
